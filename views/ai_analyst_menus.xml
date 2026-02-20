@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Keep original xmlid/model to avoid upgrade conflicts -->
+    <record id="action_ai_analyst_main" model="ir.actions.client">
+        <field name="name">AI Analyst</field>
+        <field name="tag">ai_analyst_main</field>
+        <field name="target">main</field>
+    </record>
+
+    <!-- Fallback main action (non-OWL) -->
+    <record id="action_ai_analyst_main_window" model="ir.actions.act_window">
+        <field name="name">AI Analyst</field>
+        <field name="res_model">ai.analyst.conversation</field>
+        <field name="view_mode">tree,form</field>
+        <field name="search_view_id" ref="view_ai_analyst_conversation_search"/>
+        <field name="context">{'search_default_active': 1}</field>
+    </record>
+
+    <menuitem
+        id="menu_ai_analyst_root"
+        name="AI Analyst"
+        sequence="5"
+        web_icon="ai_analyst,static/description/icon.png"
+        groups="ai_analyst.group_ai_user"
+    />
+
+    <menuitem
+        id="menu_ai_analyst_chat"
+        name="Chat"
+        parent="menu_ai_analyst_root"
+        action="action_ai_analyst_main"
+        sequence="10"
+        groups="ai_analyst.group_ai_user"
+    />
+
+    <menuitem
+        id="menu_ai_analyst_dashboards"
+        name="Dashboards"
+        parent="menu_ai_analyst_root"
+        action="action_ai_analyst_dashboards"
+        sequence="20"
+        groups="ai_analyst.group_ai_user"
+    />
+
+    <menuitem
+        id="menu_ai_analyst_reports"
+        name="Reports"
+        parent="menu_ai_analyst_root"
+        sequence="30"
+        groups="ai_analyst.group_ai_user"
+    />
+
+    <menuitem
+        id="menu_ai_analyst_saved_reports"
+        name="Saved Reports"
+        parent="menu_ai_analyst_reports"
+        action="action_ai_analyst_saved_report"
+        sequence="10"
+    />
+
+    <menuitem
+        id="menu_ai_analyst_conversations"
+        name="Conversation History"
+        parent="menu_ai_analyst_reports"
+        action="action_ai_analyst_conversation"
+        sequence="20"
+    />
+
+    <menuitem
+        id="menu_ai_analyst_admin"
+        name="Administration"
+        parent="menu_ai_analyst_root"
+        sequence="90"
+        groups="ai_analyst.group_ai_manager"
+    />
+
+    <menuitem
+        id="menu_ai_analyst_workspaces"
+        name="Workspaces"
+        parent="menu_ai_analyst_admin"
+        action="action_workspace"
+        sequence="5"
+        groups="ai_analyst.group_ai_admin"
+    />
+
+    <menuitem
+        id="menu_ai_analyst_provider_config"
+        name="Provider Configuration"
+        parent="menu_ai_analyst_admin"
+        action="action_ai_analyst_provider_config"
+        sequence="10"
+        groups="ai_analyst.group_ai_admin"
+    />
+
+    <menuitem
+        id="menu_ai_analyst_audit_log"
+        name="Audit Logs"
+        parent="menu_ai_analyst_admin"
+        action="action_ai_analyst_audit_log"
+        sequence="20"
+        groups="ai_analyst.group_ai_manager"
+    />
+
+    <menuitem
+        id="menu_ai_analyst_tool_call_log"
+        name="Tool Call Logs"
+        parent="menu_ai_analyst_admin"
+        action="action_ai_analyst_tool_call_log"
+        sequence="30"
+        groups="ai_analyst.group_ai_manager"
+    />
+
+    <menuitem id="menu_ai_analyst_config" name="Configuration" parent="menu_ai_analyst_root" sequence="95" groups="ai_analyst.group_ai_admin"/>
+    <menuitem id="menu_ai_analyst_field_kb_root" name="Field Knowledge Base" parent="menu_ai_analyst_config" sequence="10" groups="ai_analyst.group_ai_admin"/>
+    <menuitem id="menu_ai_analyst_field_kb_models" name="Models" parent="menu_ai_analyst_field_kb_root" action="action_field_kb_models" sequence="10" groups="ai_analyst.group_ai_admin"/>
+    <menuitem id="menu_ai_analyst_field_kb_fields" name="Fields" parent="menu_ai_analyst_field_kb_root" action="action_field_kb_fields" sequence="20" groups="ai_analyst.group_ai_admin"/>
+    <menuitem id="menu_ai_analyst_field_kb_synonyms" name="Synonyms" parent="menu_ai_analyst_field_kb_root" action="action_field_kb_synonyms" sequence="30" groups="ai_analyst.group_ai_admin"/>
+    <menuitem id="menu_ai_analyst_field_kb_unmapped" name="Unmapped Terms" parent="menu_ai_analyst_field_kb_root" action="action_field_kb_unmapped" sequence="40" groups="ai_analyst.group_ai_admin"/>
+
+</odoo>

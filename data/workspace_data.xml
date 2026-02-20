@@ -1,0 +1,333 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+
+        <!-- ============================================================
+             WORKSPACE: Sales
+             ============================================================ -->
+        <record id="workspace_sales" model="ai.analyst.workspace">
+            <field name="name">Sales</field>
+            <field name="code">sales</field>
+            <field name="icon">fa-line-chart</field>
+            <field name="color">4</field>
+            <field name="sequence">10</field>
+            <field name="required_group_ids" eval="[(4, ref('ai_analyst.group_ai_sales_user'))]"/>
+            <field name="description">Sales analytics workspace for the sales team. Covers online and POS revenue, product performance, margin analysis, and refund tracking.</field>
+            <field name="system_prompt_extra">You are a sales analyst for an ecommerce company.
+Primary models: sale.order, sale.order.line.
+Key metrics: revenue, AOV (average order value), order count, conversion, margin.
+Always consider both online and POS channels unless the user specifies otherwise.
+When asked about "top products", default to ranking by revenue unless told otherwise.
+If the user asks about trends, prefer grouping by week or month.</field>
+        </record>
+
+        <!-- Sales workspace tools -->
+        <record id="ws_tool_sales_1" model="ai.analyst.workspace.tool.ref">
+            <field name="workspace_id" ref="workspace_sales"/>
+            <field name="tool_name">get_sales_summary</field>
+            <field name="sequence">10</field>
+        </record>
+        <record id="ws_tool_sales_2" model="ai.analyst.workspace.tool.ref">
+            <field name="workspace_id" ref="workspace_sales"/>
+            <field name="tool_name">get_top_sellers</field>
+            <field name="sequence">20</field>
+        </record>
+        <record id="ws_tool_sales_3" model="ai.analyst.workspace.tool.ref">
+            <field name="workspace_id" ref="workspace_sales"/>
+            <field name="tool_name">get_margin_summary</field>
+            <field name="sequence">30</field>
+        </record>
+        <record id="ws_tool_sales_4" model="ai.analyst.workspace.tool.ref">
+            <field name="workspace_id" ref="workspace_sales"/>
+            <field name="tool_name">get_pos_vs_online_summary</field>
+            <field name="sequence">40</field>
+        </record>
+        <record id="ws_tool_sales_5" model="ai.analyst.workspace.tool.ref">
+            <field name="workspace_id" ref="workspace_sales"/>
+            <field name="tool_name">get_refund_return_summary</field>
+            <field name="sequence">50</field>
+        </record>
+        <record id="ws_tool_sales_6" model="ai.analyst.workspace.tool.ref">
+            <field name="workspace_id" ref="workspace_sales"/>
+            <field name="tool_name">export_csv</field>
+            <field name="sequence">90</field>
+        </record>
+
+        <!-- Sales workspace prompts -->
+        <record id="ws_prompt_sales_1" model="ai.analyst.workspace.prompt.pack">
+            <field name="workspace_id" ref="workspace_sales"/>
+            <field name="category">Quick Stats</field>
+            <field name="description">Revenue this month</field>
+            <field name="prompt_text">What was total revenue this month? Compare to last month.</field>
+            <field name="sequence">10</field>
+        </record>
+        <record id="ws_prompt_sales_2" model="ai.analyst.workspace.prompt.pack">
+            <field name="workspace_id" ref="workspace_sales"/>
+            <field name="category">Quick Stats</field>
+            <field name="description">Top 10 products</field>
+            <field name="prompt_text">Top 10 products by revenue for the last 30 days</field>
+            <field name="sequence">20</field>
+        </record>
+        <record id="ws_prompt_sales_3" model="ai.analyst.workspace.prompt.pack">
+            <field name="workspace_id" ref="workspace_sales"/>
+            <field name="category">Deep Dive</field>
+            <field name="description">Margin analysis</field>
+            <field name="prompt_text">Show me gross margin analysis by product category for this quarter</field>
+            <field name="sequence">30</field>
+        </record>
+        <record id="ws_prompt_sales_4" model="ai.analyst.workspace.prompt.pack">
+            <field name="workspace_id" ref="workspace_sales"/>
+            <field name="category">Deep Dive</field>
+            <field name="description">POS vs Online</field>
+            <field name="prompt_text">POS vs Online sales comparison for the last 90 days</field>
+            <field name="sequence">40</field>
+        </record>
+        <record id="ws_prompt_sales_5" model="ai.analyst.workspace.prompt.pack">
+            <field name="workspace_id" ref="workspace_sales"/>
+            <field name="category">Trends</field>
+            <field name="description">Refund impact</field>
+            <field name="prompt_text">Refund rate and revenue impact over the last quarter</field>
+            <field name="sequence">50</field>
+        </record>
+
+        <!-- ============================================================
+             WORKSPACE: Buying
+             ============================================================ -->
+        <record id="workspace_buying" model="ai.analyst.workspace">
+            <field name="name">Buying</field>
+            <field name="code">buying</field>
+            <field name="icon">fa-shopping-cart</field>
+            <field name="color">2</field>
+            <field name="sequence">20</field>
+            <field name="required_group_ids" eval="[(4, ref('ai_analyst.group_ai_buying_user'))]"/>
+            <field name="description">Buying and merchandising workspace. Focused on inventory velocity, stock coverage, dead stock identification, and reorder suggestions.</field>
+            <field name="system_prompt_extra">You are a buying and merchandising analyst.
+Focus on inventory velocity, sell-through rates, stock coverage, and dead stock.
+Primary models: sale.order.line (for sales velocity), stock.quant (for stock levels), purchase.order.
+When analyzing products, consider both seasonal and NOS (never out of stock) items.
+Always provide explainable results — show the formulas and reasoning behind your conclusions.
+When suggesting reorders, include current stock, velocity, and coverage calculations.</field>
+        </record>
+
+        <!-- Buying workspace tools -->
+        <record id="ws_tool_buying_1" model="ai.analyst.workspace.tool.ref">
+            <field name="workspace_id" ref="workspace_buying"/>
+            <field name="tool_name">get_inventory_valuation</field>
+            <field name="sequence">10</field>
+        </record>
+        <record id="ws_tool_buying_2" model="ai.analyst.workspace.tool.ref">
+            <field name="workspace_id" ref="workspace_buying"/>
+            <field name="tool_name">get_stock_aging</field>
+            <field name="sequence">20</field>
+        </record>
+        <record id="ws_tool_buying_3" model="ai.analyst.workspace.tool.ref">
+            <field name="workspace_id" ref="workspace_buying"/>
+            <field name="tool_name">get_top_sellers</field>
+            <field name="sequence">30</field>
+        </record>
+        <record id="ws_tool_buying_4" model="ai.analyst.workspace.tool.ref">
+            <field name="workspace_id" ref="workspace_buying"/>
+            <field name="tool_name">get_sales_summary</field>
+            <field name="sequence">40</field>
+        </record>
+        <record id="ws_tool_buying_5" model="ai.analyst.workspace.tool.ref">
+            <field name="workspace_id" ref="workspace_buying"/>
+            <field name="tool_name">get_margin_summary</field>
+            <field name="sequence">50</field>
+        </record>
+        <record id="ws_tool_buying_6" model="ai.analyst.workspace.tool.ref">
+            <field name="workspace_id" ref="workspace_buying"/>
+            <field name="tool_name">get_ap_aging</field>
+            <field name="sequence">60</field>
+        </record>
+        <record id="ws_tool_buying_7" model="ai.analyst.workspace.tool.ref">
+            <field name="workspace_id" ref="workspace_buying"/>
+            <field name="tool_name">export_csv</field>
+            <field name="sequence">90</field>
+        </record>
+
+        <!-- Buying workspace prompts -->
+        <record id="ws_prompt_buying_1" model="ai.analyst.workspace.prompt.pack">
+            <field name="workspace_id" ref="workspace_buying"/>
+            <field name="category">Stock Health</field>
+            <field name="description">Slow-moving stock</field>
+            <field name="prompt_text">Show slow-moving inventory with no sales in the last 60 days</field>
+            <field name="sequence">10</field>
+        </record>
+        <record id="ws_prompt_buying_2" model="ai.analyst.workspace.prompt.pack">
+            <field name="workspace_id" ref="workspace_buying"/>
+            <field name="category">Stock Health</field>
+            <field name="description">Inventory valuation</field>
+            <field name="prompt_text">Current inventory valuation by product category</field>
+            <field name="sequence">20</field>
+        </record>
+        <record id="ws_prompt_buying_3" model="ai.analyst.workspace.prompt.pack">
+            <field name="workspace_id" ref="workspace_buying"/>
+            <field name="category">Winners</field>
+            <field name="description">Top sellers by qty</field>
+            <field name="prompt_text">Top 20 products by units sold in the last 30 days</field>
+            <field name="sequence">30</field>
+        </record>
+        <record id="ws_prompt_buying_4" model="ai.analyst.workspace.prompt.pack">
+            <field name="workspace_id" ref="workspace_buying"/>
+            <field name="category">Payables</field>
+            <field name="description">AP aging</field>
+            <field name="prompt_text">Accounts payable aging summary by vendor</field>
+            <field name="sequence">40</field>
+        </record>
+
+        <!-- ============================================================
+             WORKSPACE: POS
+             ============================================================ -->
+        <record id="workspace_pos" model="ai.analyst.workspace">
+            <field name="name">POS</field>
+            <field name="code">pos</field>
+            <field name="icon">fa-desktop</field>
+            <field name="color">1</field>
+            <field name="sequence">30</field>
+            <field name="required_group_ids" eval="[(4, ref('ai_analyst.group_ai_pos_user'))]"/>
+            <field name="description">Point of Sale analytics workspace. Focused on in-store sales performance, basket analysis, and store comparisons.</field>
+            <field name="system_prompt_extra">You are a POS and retail analyst.
+Primary models: pos.order, pos.order.line, pos.session, pos.config.
+Key metrics: revenue, basket size (average transaction value), items per transaction.
+When relevant, break down results by POS config (store/terminal).
+Compare POS performance to online when useful for context.</field>
+        </record>
+
+        <!-- POS workspace tools -->
+        <record id="ws_tool_pos_1" model="ai.analyst.workspace.tool.ref">
+            <field name="workspace_id" ref="workspace_pos"/>
+            <field name="tool_name">get_pos_summary</field>
+            <field name="sequence">10</field>
+        </record>
+        <record id="ws_tool_pos_2" model="ai.analyst.workspace.tool.ref">
+            <field name="workspace_id" ref="workspace_pos"/>
+            <field name="tool_name">get_pos_vs_online_summary</field>
+            <field name="sequence">20</field>
+        </record>
+        <record id="ws_tool_pos_3" model="ai.analyst.workspace.tool.ref">
+            <field name="workspace_id" ref="workspace_pos"/>
+            <field name="tool_name">get_top_sellers</field>
+            <field name="sequence">30</field>
+        </record>
+        <record id="ws_tool_pos_4" model="ai.analyst.workspace.tool.ref">
+            <field name="workspace_id" ref="workspace_pos"/>
+            <field name="tool_name">get_refund_return_summary</field>
+            <field name="sequence">40</field>
+        </record>
+        <record id="ws_tool_pos_5" model="ai.analyst.workspace.tool.ref">
+            <field name="workspace_id" ref="workspace_pos"/>
+            <field name="tool_name">export_csv</field>
+            <field name="sequence">90</field>
+        </record>
+
+        <!-- POS workspace prompts -->
+        <record id="ws_prompt_pos_1" model="ai.analyst.workspace.prompt.pack">
+            <field name="workspace_id" ref="workspace_pos"/>
+            <field name="category">Quick Stats</field>
+            <field name="description">POS sales today</field>
+            <field name="prompt_text">POS sales today by store</field>
+            <field name="sequence">10</field>
+        </record>
+        <record id="ws_prompt_pos_2" model="ai.analyst.workspace.prompt.pack">
+            <field name="workspace_id" ref="workspace_pos"/>
+            <field name="category">Quick Stats</field>
+            <field name="description">Weekly comparison</field>
+            <field name="prompt_text">POS sales this week compared to last week</field>
+            <field name="sequence">20</field>
+        </record>
+        <record id="ws_prompt_pos_3" model="ai.analyst.workspace.prompt.pack">
+            <field name="workspace_id" ref="workspace_pos"/>
+            <field name="category">Deep Dive</field>
+            <field name="description">Top POS products</field>
+            <field name="prompt_text">Top selling products in-store this month</field>
+            <field name="sequence">30</field>
+        </record>
+        <record id="ws_prompt_pos_4" model="ai.analyst.workspace.prompt.pack">
+            <field name="workspace_id" ref="workspace_pos"/>
+            <field name="category">Channel</field>
+            <field name="description">POS vs Online</field>
+            <field name="prompt_text">Compare POS vs Online sales for the last 30 days</field>
+            <field name="sequence">40</field>
+        </record>
+
+        <!-- ============================================================
+             WORKSPACE: Customer Service
+             ============================================================ -->
+        <record id="workspace_cs" model="ai.analyst.workspace">
+            <field name="name">Customer Service</field>
+            <field name="code">cs</field>
+            <field name="icon">fa-headphones</field>
+            <field name="color">3</field>
+            <field name="sequence">40</field>
+            <field name="required_group_ids" eval="[(4, ref('ai_analyst.group_ai_cs_user'))]"/>
+            <field name="description">Customer service analytics workspace. Focused on refund patterns, AR aging, and sales order lookups to support customer-facing teams.</field>
+            <field name="system_prompt_extra">You are a customer service analyst.
+Primary models: sale.order, account.move, account.move.line.
+Key metrics: refund rate, refund value, AR aging, order status.
+Focus on identifying patterns in returns and refunds.
+When a user asks about a customer, look up their orders and refund history.
+Present data in a way that helps the CS team resolve issues quickly.</field>
+        </record>
+
+        <!-- CS workspace tools -->
+        <record id="ws_tool_cs_1" model="ai.analyst.workspace.tool.ref">
+            <field name="workspace_id" ref="workspace_cs"/>
+            <field name="tool_name">get_refund_return_summary</field>
+            <field name="sequence">10</field>
+        </record>
+        <record id="ws_tool_cs_2" model="ai.analyst.workspace.tool.ref">
+            <field name="workspace_id" ref="workspace_cs"/>
+            <field name="tool_name">get_ar_aging</field>
+            <field name="sequence">20</field>
+        </record>
+        <record id="ws_tool_cs_3" model="ai.analyst.workspace.tool.ref">
+            <field name="workspace_id" ref="workspace_cs"/>
+            <field name="tool_name">get_sales_summary</field>
+            <field name="sequence">30</field>
+        </record>
+        <record id="ws_tool_cs_4" model="ai.analyst.workspace.tool.ref">
+            <field name="workspace_id" ref="workspace_cs"/>
+            <field name="tool_name">export_csv</field>
+            <field name="sequence">90</field>
+        </record>
+
+        <!-- CS workspace prompts -->
+        <record id="ws_prompt_cs_1" model="ai.analyst.workspace.prompt.pack">
+            <field name="workspace_id" ref="workspace_cs"/>
+            <field name="category">Refunds</field>
+            <field name="description">Refund summary</field>
+            <field name="prompt_text">Refund and return summary for the last 30 days</field>
+            <field name="sequence">10</field>
+        </record>
+        <record id="ws_prompt_cs_2" model="ai.analyst.workspace.prompt.pack">
+            <field name="workspace_id" ref="workspace_cs"/>
+            <field name="category">Refunds</field>
+            <field name="description">Top refund products</field>
+            <field name="prompt_text">Which products have the highest refund rate this month?</field>
+            <field name="sequence">20</field>
+        </record>
+        <record id="ws_prompt_cs_3" model="ai.analyst.workspace.prompt.pack">
+            <field name="workspace_id" ref="workspace_cs"/>
+            <field name="category">Receivables</field>
+            <field name="description">AR aging</field>
+            <field name="prompt_text">Accounts receivable aging summary by customer</field>
+            <field name="sequence">30</field>
+        </record>
+
+        <!-- ============================================================
+             WORKSPACE: All Tools (admins-only)
+             ============================================================ -->
+        <record id="workspace_all_tools" model="ai.analyst.workspace">
+            <field name="name">All Tools</field>
+            <field name="code">all_tools</field>
+            <field name="icon">fa-shield</field>
+            <field name="color">9</field>
+            <field name="sequence">999</field>
+            <field name="is_all_tools">True</field>
+            <field name="description">Administrative workspace exposing all user-eligible tools without workspace allowlist restrictions.</field>
+            <field name="system_prompt_extra">This workspace is intended for AI Analyst administrators. Use full tool coverage for controlled diagnostics and advanced analysis.</field>
+        </record>
+
+    </data>
+</odoo>

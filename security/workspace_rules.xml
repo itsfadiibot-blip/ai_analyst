@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+
+        <!-- ============================================================
+             WORKSPACE RECORD RULES
+             ============================================================ -->
+
+        <!-- Workspace: users can only read active workspaces they are explicitly allowed to access.
+             Access policy for non-admin users:
+             - is_all_tools must be false
+             - required_group_ids must intersect with user's groups (OR logic)
+             - if required_group_ids is empty, workspace is hidden (default deny) -->
+        <record id="rule_workspace_user" model="ir.rule">
+            <field name="name">AI Analyst: User sees authorized workspaces</field>
+            <field name="model_id" ref="model_ai_analyst_workspace"/>
+            <field name="domain_force">[
+                ('is_active', '=', True),
+                ('is_all_tools', '=', False),
+                ('required_group_ids', 'in', user.groups_id.ids)
+            ]</field>
+            <field name="groups" eval="[(4, ref('ai_analyst.group_ai_user'))]"/>
+            <field name="perm_read" eval="True"/>
+            <field name="perm_write" eval="False"/>
+            <field name="perm_create" eval="False"/>
+            <field name="perm_unlink" eval="False"/>
+        </record>
+
+        <!-- Workspace: admins see all (including inactive and All Tools) -->
+        <record id="rule_workspace_admin" model="ir.rule">
+            <field name="name">AI Analyst: Admin manages all workspaces</field>
+            <field name="model_id" ref="model_ai_analyst_workspace"/>
+            <field name="domain_force">[(1, '=', 1)]</field>
+            <field name="groups" eval="[(4, ref('ai_analyst.group_ai_admin'))]"/>
+        </record>
+
+        <!-- Tool Ref: follows workspace visibility -->
+        <record id="rule_workspace_tool_ref_user" model="ir.rule">
+            <field name="name">AI Analyst: User sees authorized workspace tool refs</field>
+            <field name="model_id" ref="model_ai_analyst_workspace_tool_ref"/>
+            <field name="domain_force">[
+                ('workspace_id.is_active', '=', True),
+                ('workspace_id.is_all_tools', '=', False),
+                ('workspace_id.required_group_ids', 'in', user.groups_id.ids)
+            ]</field>
+            <field name="groups" eval="[(4, ref('ai_analyst.group_ai_user'))]"/>
+            <field name="perm_read" eval="True"/>
+            <field name="perm_write" eval="False"/>
+            <field name="perm_create" eval="False"/>
+            <field name="perm_unlink" eval="False"/>
+        </record>
+
+        <record id="rule_workspace_tool_ref_admin" model="ir.rule">
+            <field name="name">AI Analyst: Admin manages all tool refs</field>
+            <field name="model_id" ref="model_ai_analyst_workspace_tool_ref"/>
+            <field name="domain_force">[(1, '=', 1)]</field>
+            <field name="groups" eval="[(4, ref('ai_analyst.group_ai_admin'))]"/>
+        </record>
+
+        <!-- Prompt Pack: follows workspace visibility -->
+        <record id="rule_workspace_prompt_pack_user" model="ir.rule">
+            <field name="name">AI Analyst: User sees authorized workspace prompts</field>
+            <field name="model_id" ref="model_ai_analyst_workspace_prompt_pack"/>
+            <field name="domain_force">[
+                ('workspace_id.is_active', '=', True),
+                ('workspace_id.is_all_tools', '=', False),
+                ('workspace_id.required_group_ids', 'in', user.groups_id.ids)
+            ]</field>
+            <field name="groups" eval="[(4, ref('ai_analyst.group_ai_user'))]"/>
+            <field name="perm_read" eval="True"/>
+            <field name="perm_write" eval="False"/>
+            <field name="perm_create" eval="False"/>
+            <field name="perm_unlink" eval="False"/>
+        </record>
+
+        <record id="rule_workspace_prompt_pack_admin" model="ir.rule">
+            <field name="name">AI Analyst: Admin manages all prompt packs</field>
+            <field name="model_id" ref="model_ai_analyst_workspace_prompt_pack"/>
+            <field name="domain_force">[(1, '=', 1)]</field>
+            <field name="groups" eval="[(4, ref('ai_analyst.group_ai_admin'))]"/>
+        </record>
+
+        <!-- ============================================================
+             WORKSPACE MULTI-COMPANY RULES
+             ============================================================ -->
+
+        <record id="rule_workspace_company" model="ir.rule">
+            <field name="name">AI Analyst: Workspace multi-company</field>
+            <field name="model_id" ref="model_ai_analyst_workspace"/>
+            <field name="domain_force">[
+                '|',
+                ('company_id', '=', False),
+                ('company_id', 'in', company_ids)
+            ]</field>
+            <field name="global" eval="True"/>
+        </record>
+
+    </data>
+</odoo>

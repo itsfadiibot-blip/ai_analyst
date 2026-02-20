@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="ai_analyst.WorkspaceSelector">
+        <div class="ai-workspace-selector d-inline-flex align-items-center gap-1"
+             t-if="props.workspaces.length > 0">
+            <div class="dropdown">
+                <button class="aiBtn aiBtnSm dropdown-toggle d-flex align-items-center gap-1"
+                        type="button"
+                        data-bs-toggle="dropdown"
+                        aria-expanded="false">
+                    <i t-att-class="'fa ' + (currentWorkspace ? currentWorkspace.icon : 'fa-globe')"
+                       style="font-size: 13px;"/>
+                    <span style="font-size: 13px;">
+                        <t t-if="currentWorkspace">
+                            <t t-esc="currentWorkspace.name"/>
+                        </t>
+                        <t t-else="">All Tools</t>
+                    </span>
+                </button>
+                <ul class="dropdown-menu">
+                    <li>
+                        <a class="dropdown-item d-flex align-items-center gap-2"
+                           href="#" t-on-click.prevent="() => this.selectWorkspace(null)">
+                            <i class="fa fa-globe" style="width: 16px; text-align: center;"/>
+                            <span>All Tools</span>
+                            <i t-if="!props.selectedWorkspaceId"
+                               class="fa fa-check ms-auto text-primary"/>
+                        </a>
+                    </li>
+                    <li><hr class="dropdown-divider"/></li>
+                    <t t-foreach="props.workspaces" t-as="ws" t-key="ws.id">
+                        <li>
+                            <a class="dropdown-item d-flex align-items-center gap-2"
+                               href="#"
+                               t-on-click.prevent="() => this.selectWorkspace(ws.id)">
+                                <i t-att-class="'fa ' + (ws.icon || 'fa-briefcase')"
+                                   style="width: 16px; text-align: center;"/>
+                                <span><t t-esc="ws.name"/></span>
+                                <i t-if="props.selectedWorkspaceId === ws.id"
+                                   class="fa fa-check ms-auto text-primary"/>
+                            </a>
+                        </li>
+                    </t>
+
+                    <t t-if="props.toolNames and props.toolNames.length">
+                        <li><hr class="dropdown-divider"/></li>
+                        <li>
+                            <h6 class="dropdown-header">Tools in this view</h6>
+                        </li>
+                        <t t-foreach="props.toolNames" t-as="toolName" t-key="toolName">
+                            <li>
+                                <span class="dropdown-item-text" style="font-size: 12px;">
+                                    <t t-esc="toolName"/>
+                                </span>
+                            </li>
+                        </t>
+                    </t>
+                </ul>
+            </div>
+        </div>
+    </t>
+
+</templates>

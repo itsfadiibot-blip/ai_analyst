@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="rule_field_kb_model_company" model="ir.rule">
+        <field name="name">Field KB Model Company</field>
+        <field name="model_id" ref="model_ai_analyst_field_kb_model"/>
+        <field name="domain_force">['|',('company_id','=',False),('company_id','in',company_ids)]</field>
+        <field name="groups" eval="[(4, ref('ai_analyst.group_ai_manager'))]"/>
+    </record>
+
+    <record id="rule_field_kb_field_company" model="ir.rule">
+        <field name="name">Field KB Field Company</field>
+        <field name="model_id" ref="model_ai_analyst_field_kb_field"/>
+        <field name="domain_force">['|',('company_id','=',False),('company_id','in',company_ids)]</field>
+        <field name="groups" eval="[(4, ref('ai_analyst.group_ai_manager'))]"/>
+    </record>
+
+    <record id="rule_field_kb_synonym_company" model="ir.rule">
+        <field name="name">Field KB Synonym Company</field>
+        <field name="model_id" ref="model_ai_analyst_field_kb_synonym"/>
+        <field name="domain_force">['|',('company_id','=',False),('company_id','in',company_ids)]</field>
+        <field name="groups" eval="[(4, ref('ai_analyst.group_ai_manager'))]"/>
+    </record>
+
+    <record id="rule_field_kb_unmapped_company" model="ir.rule">
+        <field name="name">Field KB Unmapped Company</field>
+        <field name="model_id" ref="model_ai_analyst_field_kb_unmapped_log"/>
+        <field name="domain_force">[(1,'=',1)]</field>
+        <field name="groups" eval="[(4, ref('ai_analyst.group_ai_manager'))]"/>
+    </record>
+</odoo>

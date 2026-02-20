@@ -1,0 +1,164 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- ============================================================
+         WORKSPACE â€” Tree View
+         ============================================================ -->
+    <record id="view_workspace_tree" model="ir.ui.view">
+        <field name="name">ai.analyst.workspace.tree</field>
+        <field name="model">ai.analyst.workspace</field>
+        <field name="arch" type="xml">
+            <tree string="Workspaces">
+                <field name="sequence" widget="handle"/>
+                <field name="name"/>
+                <field name="code"/>
+                <field name="is_active"/>
+                <field name="is_all_tools"/>
+                <field name="tool_count" string="Tools"/>
+                <field name="prompt_count" string="Prompts"/>
+                <field name="conversation_count" string="Conversations"/>
+                <field name="company_id" groups="base.group_multi_company"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- ============================================================
+         WORKSPACE â€” Form View
+         ============================================================ -->
+    
+
+    <!-- Conversations filtered by workspace (stat button target) -->
+    <record id="action_workspace_conversations" model="ir.actions.act_window">
+        <field name="name">Workspace Conversations</field>
+        <field name="res_model">ai.analyst.conversation</field>
+        <field name="view_mode">tree,form</field>
+        <field name="domain">[('workspace_id', '=', active_id)]</field>
+        <field name="context">{'search_default_active': 1}</field>
+    </record>
+
+
+<record id="view_workspace_form" model="ir.ui.view">
+        <field name="name">ai.analyst.workspace.form</field>
+        <field name="model">ai.analyst.workspace</field>
+        <field name="arch" type="xml">
+            <form string="Workspace">
+                <sheet>
+                    <div class="oe_button_box" name="button_box">
+                        <button name="%(ai_analyst.action_workspace_conversations)d"
+                                type="action" class="oe_stat_button" icon="fa-comments">
+                            <field name="conversation_count" widget="statinfo" string="Conversations"/>
+                        </button>
+                    </div>
+                    <widget name="web_ribbon" title="Archived"
+                            bg_color="text-bg-danger"
+                            invisible="is_active"/>
+                    <div class="oe_title">
+                        <h1>
+                            <field name="name" placeholder="e.g. Sales"/>
+                        </h1>
+                    </div>
+                    <group>
+                        <group string="General">
+                            <field name="code"/>
+                            <field name="icon"/>
+                            <field name="color" widget="color_picker"/>
+                            <field name="sequence"/>
+                            <field name="is_active"/>
+                            <field name="is_all_tools"/>
+                            <field name="company_id" groups="base.group_multi_company"/>
+                        </group>
+                        <group string="Access Control">
+                            <field name="required_group_ids" widget="many2many_tags"/>
+                            <field name="default_dashboard_id"/>
+                        </group>
+                    </group>
+                    <group string="Query Budget Overrides">
+                        <group>
+                            <field name="max_tool_calls"
+                                   help="0 = use global default"/>
+                            <field name="max_inline_rows"
+                                   help="0 = use global default"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="System Prompt Context" name="system_prompt">
+                            <field name="system_prompt_extra"
+                                   placeholder="Injected into the AI system prompt when this workspace is active.&#10;&#10;Example:&#10;You are a sales analyst for an ecommerce company.&#10;Primary models: sale.order, sale.order.line.&#10;Key metrics: revenue, AOV, order count, margin."
+                                   widget="text"/>
+                            <div class="text-muted small mt-2">
+                                This text is appended to the AI's system prompt when a user is in this workspace.
+                                Use it to give the AI domain-specific knowledge, focus areas, and constraints.
+                            </div>
+                        </page>
+                        <page string="Tool Allowlist" name="tools">
+                            <field name="tool_ref_ids">
+                                <tree string="Allowed Tools" editable="bottom">
+                                    <field name="sequence" widget="handle"/>
+                                    <field name="tool_name"/>
+                                    <field name="is_active"/>
+                                </tree>
+                            </field>
+                            <div class="text-muted small mt-2">
+                                If the tool allowlist is empty, all tools the user has access to will be available.
+                                Add tools here to restrict this workspace to a specific set.
+                            </div>
+                        </page>
+                        <page string="Suggested Prompts" name="prompts">
+                            <field name="prompt_pack_ids">
+                                <tree string="Suggested Prompts" editable="bottom">
+                                    <field name="sequence" widget="handle"/>
+                                    <field name="category"/>
+                                    <field name="description" string="Label"/>
+                                    <field name="prompt_text"/>
+                                    <field name="icon"/>
+                                    <field name="is_active"/>
+                                </tree>
+                            </field>
+                        </page>
+                        <page string="Description" name="description">
+                            <field name="description"
+                                   placeholder="Internal notes about this workspace's purpose and audience."/>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- ============================================================
+         WORKSPACE â€” Search View
+         ============================================================ -->
+    <record id="view_workspace_search" model="ir.ui.view">
+        <field name="name">ai.analyst.workspace.search</field>
+        <field name="model">ai.analyst.workspace</field>
+        <field name="arch" type="xml">
+            <search string="Workspaces">
+                <field name="name"/>
+                <field name="code"/>
+                <filter name="active" string="Active" domain="[('is_active','=',True)]"/>
+                <filter name="inactive" string="Archived" domain="[('is_active','=',False)]"/>
+            </search>
+        </field>
+    </record>
+
+    <!-- ============================================================
+         WORKSPACE â€” Actions
+         ============================================================ -->
+    <record id="action_workspace" model="ir.actions.act_window">
+        <field name="name">Workspaces</field>
+        <field name="res_model">ai.analyst.workspace</field>
+        <field name="view_mode">tree,form</field>
+        <field name="search_view_id" ref="view_workspace_search"/>
+        <field name="context">{'search_default_active': 1}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Create your first workspace
+            </p>
+            <p>
+                Workspaces scope the AI experience per team: which tools are available,
+                which prompts are suggested, and what domain context the AI receives.
+            </p>
+        </field>
+    </record>
+</odoo>
+

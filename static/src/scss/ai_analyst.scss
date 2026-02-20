@@ -1,0 +1,282 @@
+.aiAnalystApp {
+  --ai-bg: #f6f8fc;
+  --ai-surface: rgba(255, 255, 255, 0.78);
+  --ai-surface-2: rgba(255, 255, 255, 0.56);
+  --ai-border: rgba(16, 24, 40, 0.08);
+  --ai-gridline: rgba(16, 24, 40, 0.08);
+  --ai-text: var(--o-main-text-color, #101828);
+  --ai-text-muted: rgba(16, 24, 40, 0.62);
+  --ai-accent: #4f6bff;
+  --ai-accent-glow: rgba(79, 107, 255, 0.35);
+  --ai-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+  color: var(--ai-text);
+
+  @media (prefers-color-scheme: dark) {
+    --ai-bg: #0b1120;
+    --ai-surface: rgba(15, 23, 42, 0.62);
+    --ai-surface-2: rgba(15, 23, 42, 0.45);
+    --ai-border: rgba(148, 163, 184, 0.12);
+    --ai-gridline: rgba(148, 163, 184, 0.12);
+    --ai-text: #e6edf8;
+    --ai-text-muted: rgba(230, 237, 248, 0.7);
+    --ai-accent: #66d9ff;
+    --ai-accent-glow: rgba(102, 217, 255, 0.28);
+    --ai-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  }
+}
+
+.o_web_client.o_is_dark .aiAnalystApp,
+html[data-theme='dark'] .aiAnalystApp,
+body.o_dark .aiAnalystApp {
+  --ai-bg: #0b1120;
+  --ai-surface: rgba(15, 23, 42, 0.62);
+  --ai-surface-2: rgba(15, 23, 42, 0.45);
+  --ai-border: rgba(148, 163, 184, 0.12);
+  --ai-gridline: rgba(148, 163, 184, 0.12);
+  --ai-text: #e6edf8;
+  --ai-text-muted: rgba(230, 237, 248, 0.7);
+  --ai-accent: #66d9ff;
+  --ai-accent-glow: rgba(102, 217, 255, 0.28);
+  --ai-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+.ai-analyst-container {
+  height: calc(100vh - 46px);
+  background: var(--ai-bg);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.ai-analyst-sidebar,
+.ai-analyst-input,
+.ai-msg-assistant-bubble,
+.ai-chart-container,
+.ai-kpi-card {
+  background: var(--ai-surface) !important;
+  border: 1px solid var(--ai-border) !important;
+  border-radius: 14px;
+  box-shadow: var(--ai-shadow);
+}
+
+.ai-analyst-sidebar { border: none !important; box-shadow: none; background: var(--ai-surface-2) !important; }
+.ai-analyst-conv-item { border: 0 !important; margin: 6px 8px; border-radius: 12px; }
+.ai-analyst-conv-item:hover { background: var(--ai-surface) !important; }
+.ai-analyst-messages { background: transparent; }
+.ai-msg-user-bubble { background: color-mix(in srgb, var(--ai-accent) 15%, transparent) !important; border: 0; border-radius: 14px; }
+.ai-msg-assistant-bubble { border: 0; }
+
+.aiBtn { border: 0; border-radius: 999px; padding: 8px 14px; font-weight: 500; transition: all .2s ease; }
+.aiBtnSm { padding: 6px 12px; font-size: 12px; }
+.aiBtnPrimary { background: var(--ai-accent); color: #fff; box-shadow: 0 0 0 1px color-mix(in srgb, var(--ai-accent) 45%, transparent), 0 8px 20px var(--ai-accent-glow); }
+.aiBtnGhost { background: transparent; color: var(--ai-text); }
+.aiBtnGhost:hover { background: var(--ai-surface); }
+.aiIconBtn { background: transparent; color: var(--ai-text-muted); border-radius: 10px; padding: 6px 10px; }
+.aiIconBtn:hover { color: var(--ai-text); background: var(--ai-surface-2); }
+.aiDanger:hover { color: #ff6363; }
+
+.aiChip, .ai-analyst-messages .btn.btn-outline-secondary.btn-sm {
+  border: 1px solid var(--ai-border);
+  background: var(--ai-surface-2);
+  color: var(--ai-text-muted);
+  border-radius: 999px;
+  padding: 8px 14px;
+}
+.aiChip:hover { color: var(--ai-text); border-color: color-mix(in srgb, var(--ai-accent) 40%, var(--ai-border)); }
+
+.ai-table-container table,
+.aiAnalystApp table.table { color: var(--ai-text); }
+.ai-table-container table th,
+.aiAnalystApp table.table th { background: transparent; color: var(--ai-text-muted); border-bottom: 1px solid var(--ai-gridline); position: sticky; top: 0; }
+.ai-table-container table td,
+.aiAnalystApp table.table td { border-color: var(--ai-gridline); }
+.ai-table-container tbody tr:nth-child(odd),
+.aiAnalystApp table.table tbody tr:nth-child(odd) { background: color-mix(in srgb, var(--ai-surface) 40%, transparent); }
+
+.ai-chart-container { border-radius: 16px; padding: 10px; }
+
+.aiAnalystApp.aiConsoleMode {
+  --ai-bg: radial-gradient(circle at 20% 0%, #132343 0%, #070d1d 45%, #050915 100%);
+  --ai-surface: rgba(13, 24, 46, 0.58);
+  --ai-surface-2: rgba(13, 24, 46, 0.38);
+  --ai-border: rgba(121, 225, 255, 0.2);
+  --ai-gridline: rgba(121, 225, 255, 0.2);
+  --ai-text: #dff8ff;
+  --ai-text-muted: rgba(223, 248, 255, 0.68);
+  --ai-accent: #48d7ff;
+  --ai-accent-glow: rgba(72, 215, 255, 0.35);
+}
+.aiAnalystApp.aiConsoleMode .ai-analyst-container { background: var(--ai-bg); }
+.aiAnalystApp.aiConsoleMode .ai-analyst-topbar { background: linear-gradient(90deg, rgba(72,215,255,.10), rgba(72,215,255,.02)); border-bottom: 1px solid var(--ai-border); }
+.aiAnalystApp.aiConsoleMode .ai-chart-container,
+.aiAnalystApp.aiConsoleMode .ai-msg-assistant-bubble,
+.aiAnalystApp.aiConsoleMode .ai-analyst-input,
+.aiAnalystApp.aiConsoleMode .ai-kpi-card { backdrop-filter: blur(10px); }
+
+/* Strong UI reset for Odoo default button/table chrome */
+.aiAnalystApp .btn,
+.aiAnalystApp button,
+.aiAnalystApp .form-control,
+.aiAnalystApp .table,
+.aiAnalystApp .table th,
+.aiAnalystApp .table td {
+  color: var(--ai-text);
+}
+
+.aiAnalystApp button {
+  border: 0 !important;
+  outline: none;
+}
+
+.aiAnalystApp .aiBtn,
+.aiAnalystApp button.aiBtn {
+  border: 0 !important;
+  background: transparent;
+  color: var(--ai-text);
+  border-radius: 12px !important;
+  box-shadow: none;
+}
+
+.aiAnalystApp .aiBtnPrimary,
+.aiAnalystApp button.aiBtnPrimary {
+  background: var(--ai-accent) !important;
+  color: #fff !important;
+  border-radius: 12px !important;
+  box-shadow: 0 8px 24px var(--ai-accent-glow) !important;
+}
+
+.aiAnalystApp .aiBtnGhost,
+.aiAnalystApp button.aiBtnGhost,
+.aiAnalystApp .aiIconBtn,
+.aiAnalystApp button.aiIconBtn {
+  background: color-mix(in srgb, var(--ai-surface) 76%, transparent) !important;
+  color: var(--ai-text-muted) !important;
+  border: 1px solid color-mix(in srgb, var(--ai-border) 70%, transparent) !important;
+}
+
+.aiAnalystApp .aiIconBtn:hover,
+.aiAnalystApp .aiBtnGhost:hover {
+  color: var(--ai-text) !important;
+  border-color: color-mix(in srgb, var(--ai-accent) 35%, var(--ai-border)) !important;
+  transform: translateY(-1px);
+}
+
+.aiAnalystApp .aiChip,
+.aiAnalystApp button.aiChip {
+  background: color-mix(in srgb, var(--ai-surface-2) 85%, transparent) !important;
+  border: 1px solid color-mix(in srgb, var(--ai-border) 75%, transparent) !important;
+  color: var(--ai-text) !important;
+  border-radius: 999px !important;
+  font-weight: 500;
+}
+
+.aiAnalystApp .aiChip:hover,
+.aiAnalystApp .aiChip:focus {
+  border-color: color-mix(in srgb, var(--ai-accent) 45%, var(--ai-border)) !important;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ai-accent) 18%, transparent) !important;
+}
+
+.aiAnalystApp .ai-analyst-sidebar,
+.aiAnalystApp .ai-analyst-main,
+.aiAnalystApp .ai-analyst-topbar,
+.aiAnalystApp .ai-analyst-input {
+  border-color: transparent !important;
+}
+
+.aiAnalystApp .ai-analyst-conv-item,
+.aiAnalystApp .ai-msg-assistant,
+.aiAnalystApp .ai-msg-user {
+  border: 0 !important;
+}
+
+.aiAnalystApp .ai-analyst-container h4,
+.aiAnalystApp .ai-analyst-container h5,
+.aiAnalystApp .ai-analyst-container p,
+.aiAnalystApp .ai-analyst-container span,
+.aiAnalystApp .ai-analyst-container label,
+.aiAnalystApp .ai-analyst-container td,
+.aiAnalystApp .ai-analyst-container th {
+  color: var(--ai-text);
+}
+
+.aiAnalystApp .text-muted,
+.aiAnalystApp .ai-meta,
+.aiAnalystApp .ai-analyst-container .small {
+  color: var(--ai-text-muted) !important;
+}
+
+.aiAnalystApp.aiConsoleMode .ai-analyst-container {
+  border: 1px solid rgba(108, 219, 255, 0.22);
+  box-shadow: inset 0 0 0 1px rgba(108, 219, 255, 0.08), 0 20px 50px rgba(0, 0, 0, 0.35);
+}
+
+.aiAnalystApp.aiConsoleMode .ai-analyst-sidebar,
+.aiAnalystApp.aiConsoleMode .ai-analyst-input,
+.aiAnalystApp.aiConsoleMode .ai-msg-assistant-bubble,
+.aiAnalystApp.aiConsoleMode .ai-chart-container,
+.aiAnalystApp.aiConsoleMode .ai-kpi-card {
+  border: 1px solid rgba(108, 219, 255, 0.2) !important;
+}
+
+.aiAnalystApp.aiConsoleMode .aiChip,
+.aiAnalystApp.aiConsoleMode button.aiChip {
+  color: #dff8ff !important;
+  background: rgba(7, 29, 52, 0.52) !important;
+  border-color: rgba(108, 219, 255, 0.3) !important;
+}
+
+.aiAnalystApp.aiConsoleMode .aiBtnGhost,
+.aiAnalystApp.aiConsoleMode .aiIconBtn {
+  color: #bdeeff !important;
+  background: rgba(8, 26, 46, 0.45) !important;
+  border-color: rgba(108, 219, 255, 0.25) !important;
+}
+
+.aiAnalystApp.aiConsoleMode .form-check-input {
+  background-color: rgba(13, 31, 52, 0.8);
+  border-color: rgba(108, 219, 255, 0.4);
+}
+
+/* Final visibility hardening for console mode */
+.aiAnalystApp.aiConsoleMode,
+.aiAnalystApp.aiConsoleMode * {
+  color: #dff8ff;
+}
+
+.aiAnalystApp.aiConsoleMode .text-muted,
+.aiAnalystApp.aiConsoleMode .small,
+.aiAnalystApp.aiConsoleMode .ai-meta,
+.aiAnalystApp.aiConsoleMode .badge {
+  color: rgba(223, 248, 255, 0.78) !important;
+}
+
+.aiAnalystApp.aiConsoleMode input,
+.aiAnalystApp.aiConsoleMode textarea,
+.aiAnalystApp.aiConsoleMode select,
+.aiAnalystApp.aiConsoleMode .form-control {
+  color: #e9fbff !important;
+  background: rgba(7, 25, 45, 0.68) !important;
+  border: 1px solid rgba(108, 219, 255, 0.28) !important;
+}
+
+.aiAnalystApp.aiConsoleMode input::placeholder,
+.aiAnalystApp.aiConsoleMode textarea::placeholder {
+  color: rgba(223, 248, 255, 0.55) !important;
+}
+
+.aiAnalystApp.aiConsoleMode .table,
+.aiAnalystApp.aiConsoleMode .table th,
+.aiAnalystApp.aiConsoleMode .table td,
+.aiAnalystApp.aiConsoleMode .card,
+.aiAnalystApp.aiConsoleMode .card * {
+  color: #dff8ff !important;
+}
+
+.aiAnalystApp.aiConsoleMode .aiBtn,
+.aiAnalystApp.aiConsoleMode .aiChip,
+.aiAnalystApp.aiConsoleMode button {
+  color: #dff8ff !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aiAnalystApp * { transition: none !important; animation: none !important; }
+}

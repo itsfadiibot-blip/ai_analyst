@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- ============================================================
+         CONVERSATION VIEWS
+         ============================================================ -->
+
+    <!-- Tree View -->
+    <record id="view_ai_analyst_conversation_tree" model="ir.ui.view">
+        <field name="name">ai.analyst.conversation.tree</field>
+        <field name="model">ai.analyst.conversation</field>
+        <field name="arch" type="xml">
+            <tree string="Conversations" default_order="write_date desc">
+                <field name="name"/>
+                <field name="user_id"/>
+                <field name="message_count"/>
+                <field name="workspace_id" optional="show"/>
+                <field name="state" widget="badge"
+                       decoration-success="state == 'active'"
+                       decoration-muted="state == 'archived'"/>
+                <field name="company_id" groups="base.group_multi_company"/>
+                <field name="create_date"/>
+                <field name="write_date"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Form View -->
+    <record id="view_ai_analyst_conversation_form" model="ir.ui.view">
+        <field name="name">ai.analyst.conversation.form</field>
+        <field name="model">ai.analyst.conversation</field>
+        <field name="arch" type="xml">
+            <form string="Conversation">
+                <header>
+                    <button name="action_archive" string="Archive" type="object"
+                            class="btn-secondary"
+                            invisible="state != 'active'"/>
+                    <button name="action_unarchive" string="Unarchive" type="object"
+                            class="btn-secondary"
+                            invisible="state != 'archived'"/>
+                    <field name="state" widget="statusbar"/>
+                </header>
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="name"/>
+                            <field name="user_id"/>
+                        </group>
+                        <group>
+                            <field name="workspace_id"/>
+                            <field name="company_id" groups="base.group_multi_company"/>
+                            <field name="message_count"/>
+                            <field name="create_date"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Messages" name="messages">
+                            <field name="message_ids" mode="tree" readonly="1">
+                                <tree string="Messages" default_order="create_date asc">
+                                    <field name="create_date"/>
+                                    <field name="role" widget="badge"
+                                           decoration-info="role == 'user'"
+                                           decoration-success="role == 'assistant'"
+                                           decoration-muted="role == 'system'"/>
+                                    <field name="content" widget="text"/>
+                                    <field name="tokens_input"/>
+                                    <field name="tokens_output"/>
+                                    <field name="processing_time_ms"/>
+                                    <field name="provider_model"/>
+                                </tree>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Search View -->
+    <record id="view_ai_analyst_conversation_search" model="ir.ui.view">
+        <field name="name">ai.analyst.conversation.search</field>
+        <field name="model">ai.analyst.conversation</field>
+        <field name="arch" type="xml">
+            <search string="Search Conversations">
+                <field name="name"/>
+                <field name="user_id"/>
+                <filter name="active" string="Active" domain="[('state', '=', 'active')]"/>
+                <filter name="archived" string="Archived" domain="[('state', '=', 'archived')]"/>
+                <separator/>
+                <filter name="my_conversations" string="My Conversations"
+                        domain="[('user_id', '=', uid)]"/>
+                <group expand="0" string="Group By">
+                    <filter name="group_user" string="User" context="{'group_by': 'user_id'}"/>
+                    <filter name="group_workspace" string="Workspace" context="{'group_by': 'workspace_id'}"/>
+                    <filter name="group_state" string="State" context="{'group_by': 'state'}"/>
+                    <filter name="group_date" string="Date" context="{'group_by': 'create_date:month'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- Action -->
+    <record id="action_ai_analyst_conversation" model="ir.actions.act_window">
+        <field name="name">Conversations</field>
+        <field name="res_model">ai.analyst.conversation</field>
+        <field name="view_mode">tree,form</field>
+        <field name="search_view_id" ref="view_ai_analyst_conversation_search"/>
+        <field name="context">{'search_default_active': 1}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                No conversations yet
+            </p>
+            <p>
+                Start a new conversation in the AI Analyst Chat.
+            </p>
+        </field>
+    </record>
+
+</odoo>

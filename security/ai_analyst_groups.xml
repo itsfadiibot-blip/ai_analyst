@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="0">
+
+        <!-- Module Category -->
+        <record id="module_category_ai_analyst" model="ir.module.category">
+            <field name="name">AI Analyst</field>
+            <field name="description">AI-powered business analytics</field>
+            <field name="sequence">100</field>
+        </record>
+
+        <!-- Group: AI Analyst User -->
+        <record id="group_ai_user" model="res.groups">
+            <field name="name">User</field>
+            <field name="category_id" ref="module_category_ai_analyst"/>
+            <field name="implied_ids" eval="[(4, ref('base.group_user'))]"/>
+            <field name="comment">Can use the AI Analyst chat interface and view own conversation history.</field>
+        </record>
+
+        <!-- Group: AI Analyst Manager -->
+        <record id="group_ai_manager" model="res.groups">
+            <field name="name">Manager</field>
+            <field name="category_id" ref="module_category_ai_analyst"/>
+            <field name="implied_ids" eval="[(4, ref('ai_analyst.group_ai_user'))]"/>
+            <field name="comment">Can view all users' history, audit logs, and tool usage stats.</field>
+        </record>
+
+        <!-- Group: AI Analyst Admin -->
+        <record id="group_ai_admin" model="res.groups">
+            <field name="name">Administrator</field>
+            <field name="category_id" ref="module_category_ai_analyst"/>
+            <field name="implied_ids" eval="[(4, ref('ai_analyst.group_ai_manager'))]"/>
+            <field name="comment">Can configure providers, API keys, and manage the tool registry.</field>
+        </record>
+
+        <!-- Workspace role groups -->
+        <record id="group_ai_sales_user" model="res.groups">
+            <field name="name">Sales Workspace User</field>
+            <field name="category_id" ref="module_category_ai_analyst"/>
+            <field name="implied_ids" eval="[(4, ref('ai_analyst.group_ai_user'))]"/>
+        </record>
+
+        <record id="group_ai_buying_user" model="res.groups">
+            <field name="name">Buying Workspace User</field>
+            <field name="category_id" ref="module_category_ai_analyst"/>
+            <field name="implied_ids" eval="[(4, ref('ai_analyst.group_ai_user'))]"/>
+        </record>
+
+        <record id="group_ai_pos_user" model="res.groups">
+            <field name="name">POS Workspace User</field>
+            <field name="category_id" ref="module_category_ai_analyst"/>
+            <field name="implied_ids" eval="[(4, ref('ai_analyst.group_ai_user'))]"/>
+        </record>
+
+        <record id="group_ai_cs_user" model="res.groups">
+            <field name="name">Customer Service Workspace User</field>
+            <field name="category_id" ref="module_category_ai_analyst"/>
+            <field name="implied_ids" eval="[(4, ref('ai_analyst.group_ai_user'))]"/>
+        </record>
+
+        <record id="group_boss_open_query" model="res.groups">
+            <field name="name">Boss Open Query Access</field>
+            <field name="category_id" ref="module_category_ai_analyst"/>
+            <field name="implied_ids" eval="[(4, ref('ai_analyst.group_ai_user'))]"/>
+            <field name="comment">Boss-only access for the boss_open_query tool.</field>
+        </record>
+
+    </data>
+</odoo>

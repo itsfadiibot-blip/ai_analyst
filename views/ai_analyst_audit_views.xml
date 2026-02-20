@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- ============================================================
+         AUDIT LOG VIEWS
+         ============================================================ -->
+
+    <record id="view_audit_log_tree" model="ir.ui.view">
+        <field name="name">ai.analyst.audit.log.tree</field>
+        <field name="model">ai.analyst.audit.log</field>
+        <field name="arch" type="xml">
+            <tree string="Audit Logs" default_order="create_date desc"
+                  create="false" edit="false" delete="false">
+                <field name="create_date"/>
+                <field name="user_id"/>
+                <field name="event_type" widget="badge"
+                       decoration-info="event_type == 'query'"
+                       decoration-success="event_type == 'response'"
+                       decoration-warning="event_type == 'tool_call'"
+                       decoration-danger="event_type in ('error', 'access_denied', 'rate_limit')"/>
+                <field name="summary"/>
+                <field name="provider" optional="show"/>
+                <field name="model_name" optional="show"/>
+                <field name="tokens_input" optional="hide"/>
+                <field name="tokens_output" optional="hide"/>
+                <field name="latency_ms" optional="show"/>
+                <field name="company_id" groups="base.group_multi_company"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_audit_log_form" model="ir.ui.view">
+        <field name="name">ai.analyst.audit.log.form</field>
+        <field name="model">ai.analyst.audit.log</field>
+        <field name="arch" type="xml">
+            <form string="Audit Log Entry" create="false" edit="false" delete="false">
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="create_date"/>
+                            <field name="user_id"/>
+                            <field name="event_type"/>
+                            <field name="conversation_id"/>
+                        </group>
+                        <group>
+                            <field name="provider"/>
+                            <field name="model_name"/>
+                            <field name="tokens_input"/>
+                            <field name="tokens_output"/>
+                            <field name="latency_ms"/>
+                            <field name="status_code"/>
+                            <field name="company_id"/>
+                        </group>
+                    </group>
+                    <group>
+                        <field name="summary"/>
+                        <field name="error_message" invisible="not error_message"/>
+                        <field name="detail_json" invisible="not detail_json"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_audit_log_search" model="ir.ui.view">
+        <field name="name">ai.analyst.audit.log.search</field>
+        <field name="model">ai.analyst.audit.log</field>
+        <field name="arch" type="xml">
+            <search string="Search Audit Logs">
+                <field name="user_id"/>
+                <field name="summary"/>
+                <field name="provider"/>
+                <filter name="queries" string="Queries" domain="[('event_type', '=', 'query')]"/>
+                <filter name="responses" string="Responses" domain="[('event_type', '=', 'response')]"/>
+                <filter name="errors" string="Errors" domain="[('event_type', 'in', ['error', 'access_denied'])]"/>
+                <filter name="rate_limits" string="Rate Limits" domain="[('event_type', '=', 'rate_limit')]"/>
+                <separator/>
+                <filter name="today" string="Today"
+                        domain="[('create_date', '>=', (context_today()).strftime('%%Y-%%m-%%d'))]"/>
+                <filter name="last_7_days" string="Last 7 Days"
+                        domain="[('create_date', '>=', (context_today() - datetime.timedelta(days=7)).strftime('%%Y-%%m-%%d'))]"/>
+                <group expand="0" string="Group By">
+                    <filter name="group_user" string="User" context="{'group_by': 'user_id'}"/>
+                    <filter name="group_event_type" string="Event Type" context="{'group_by': 'event_type'}"/>
+                    <filter name="group_provider" string="Provider" context="{'group_by': 'provider'}"/>
+                    <filter name="group_date" string="Date" context="{'group_by': 'create_date:day'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- Pivot view for usage statistics -->
+    <record id="view_audit_log_pivot" model="ir.ui.view">
+        <field name="name">ai.analyst.audit.log.pivot</field>
+        <field name="model">ai.analyst.audit.log</field>
+        <field name="arch" type="xml">
+            <pivot string="Usage Statistics">
+                <field name="create_date" interval="day" type="row"/>
+                <field name="event_type" type="col"/>
+                <field name="tokens_input" type="measure"/>
+                <field name="tokens_output" type="measure"/>
+                <field name="latency_ms" type="measure"/>
+            </pivot>
+        </field>
+    </record>
+
+    <!-- Graph view for trends -->
+    <record id="view_audit_log_graph" model="ir.ui.view">
+        <field name="name">ai.analyst.audit.log.graph</field>
+        <field name="model">ai.analyst.audit.log</field>
+        <field name="arch" type="xml">
+            <graph string="Usage Trends" type="line">
+                <field name="create_date" interval="day"/>
+                <field name="tokens_input" type="measure"/>
+                <field name="tokens_output" type="measure"/>
+            </graph>
+        </field>
+    </record>
+
+    <record id="action_ai_analyst_audit_log" model="ir.actions.act_window">
+        <field name="name">Audit Logs</field>
+        <field name="res_model">ai.analyst.audit.log</field>
+        <field name="view_mode">tree,form,pivot,graph</field>
+        <field name="search_view_id" ref="view_audit_log_search"/>
+        <field name="context">{'search_default_today': 1}</field>
+    </record>
+
+    <!-- ============================================================
+         TOOL CALL LOG VIEWS
+         ============================================================ -->
+
+    <record id="view_tool_call_log_tree" model="ir.ui.view">
+        <field name="name">ai.analyst.tool.call.log.tree</field>
+        <field name="model">ai.analyst.tool.call.log</field>
+        <field name="arch" type="xml">
+            <tree string="Tool Call Logs" default_order="create_date desc"
+                  create="false" edit="false" delete="false">
+                <field name="create_date"/>
+                <field name="user_id"/>
+                <field name="tool_name" widget="badge"/>
+                <field name="execution_time_ms"/>
+                <field name="row_count"/>
+                <field name="success" widget="boolean"
+                       decoration-success="success"
+                       decoration-danger="not success"/>
+                <field name="error_message" optional="hide"/>
+                <field name="company_id" groups="base.group_multi_company"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_tool_call_log_search" model="ir.ui.view">
+        <field name="name">ai.analyst.tool.call.log.search</field>
+        <field name="model">ai.analyst.tool.call.log</field>
+        <field name="arch" type="xml">
+            <search string="Search Tool Call Logs">
+                <field name="tool_name"/>
+                <field name="user_id"/>
+                <filter name="success" string="Successful" domain="[('success', '=', True)]"/>
+                <filter name="errors" string="Errors" domain="[('success', '=', False)]"/>
+                <group expand="0" string="Group By">
+                    <filter name="group_tool" string="Tool" context="{'group_by': 'tool_name'}"/>
+                    <filter name="group_user" string="User" context="{'group_by': 'user_id'}"/>
+                    <filter name="group_date" string="Date" context="{'group_by': 'create_date:day'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_ai_analyst_tool_call_log" model="ir.actions.act_window">
+        <field name="name">Tool Call Logs</field>
+        <field name="res_model">ai.analyst.tool.call.log</field>
+        <field name="view_mode">tree,form,pivot,graph</field>
+        <field name="search_view_id" ref="view_tool_call_log_search"/>
+    </record>
+
+</odoo>

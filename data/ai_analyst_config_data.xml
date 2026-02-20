@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+
+        <!-- Default system parameters -->
+        <record id="config_max_tool_calls" model="ir.config_parameter">
+            <field name="key">ai_analyst.max_tool_calls</field>
+            <field name="value">8</field>
+        </record>
+
+        <record id="config_max_history" model="ir.config_parameter">
+            <field name="key">ai_analyst.max_history_messages</field>
+            <field name="value">20</field>
+        </record>
+
+        <record id="config_rate_limit" model="ir.config_parameter">
+            <field name="key">ai_analyst.rate_limit_per_minute</field>
+            <field name="value">20</field>
+        </record>
+
+        <record id="config_max_input" model="ir.config_parameter">
+            <field name="key">ai_analyst.max_input_chars</field>
+            <field name="value">8000</field>
+        </record>
+
+        <record id="config_log_retention" model="ir.config_parameter">
+            <field name="key">ai_analyst.log_retention_days</field>
+            <field name="value">90</field>
+        </record>
+
+    </data>
+</odoo>

@@ -1,0 +1,91 @@
+.aiAnalystApp.aiDashboardRoot {
+  min-height: calc(100vh - 46px);
+}
+
+.aiAnalystApp.aiDashboardRoot.aiConsoleMode {
+  background: radial-gradient(circle at 20% 0%, #112341 0%, #071224 45%, #050b16 100%) !important;
+  color: #dff8ff !important;
+}
+
+.aiAnalystApp.aiDashboardRoot.aiConsoleMode,
+.aiAnalystApp.aiDashboardRoot.aiConsoleMode * {
+  color: #dff8ff;
+}
+
+.aiAnalystApp .aiDashboardCard {
+  border: 1px solid color-mix(in srgb, var(--ai-border) 70%, transparent) !important;
+  border-radius: 16px;
+  background: var(--ai-surface);
+  box-shadow: var(--ai-shadow);
+}
+
+.aiAnalystApp .aiDashboardCard .card-header {
+  border-bottom: 0 !important;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--ai-surface) 86%, transparent), transparent);
+}
+
+.aiAnalystApp.aiDashboardRoot.aiConsoleMode .aiDashboardCard {
+  background: rgba(11, 30, 53, 0.62) !important;
+  border-color: rgba(108, 219, 255, 0.26) !important;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.38), inset 0 0 0 1px rgba(108, 219, 255, 0.12);
+  backdrop-filter: blur(8px);
+}
+
+/* Force readable widget body (fix washed gray layer) */
+.aiAnalystApp.aiDashboardRoot.aiConsoleMode .aiDashboardCard .card-body {
+  background: rgba(6, 22, 40, 0.88) !important;
+  color: #dff8ff !important;
+}
+
+.aiAnalystApp.aiDashboardRoot.aiConsoleMode .aiDashboardCard .card-body * {
+  color: #dff8ff !important;
+}
+
+.aiAnalystApp.aiDashboardRoot.aiConsoleMode .aiDashboardCard .table,
+.aiAnalystApp.aiDashboardRoot.aiConsoleMode .aiDashboardCard .table th,
+.aiAnalystApp.aiDashboardRoot.aiConsoleMode .aiDashboardCard .table td {
+  background: transparent !important;
+  color: #dff8ff !important;
+}
+
+.aiAnalystApp.aiDashboardRoot.aiConsoleMode .aiDashboardCard .table thead th {
+  background: rgba(31, 63, 94, 0.72) !important;
+}
+
+.aiAnalystApp.aiDashboardRoot.aiConsoleMode .aiDashboardCard .table tbody tr:nth-child(odd) {
+  background: rgba(14, 35, 56, 0.45) !important;
+}
+
+.aiAnalystApp.aiDashboardRoot .table,
+.aiAnalystApp.aiDashboardRoot .table th,
+.aiAnalystApp.aiDashboardRoot .table td {
+  color: inherit !important;
+}
+
+.aiAnalystApp.aiDashboardRoot .table thead th {
+  border-bottom: 1px solid var(--ai-gridline) !important;
+  background: color-mix(in srgb, var(--ai-surface) 82%, transparent) !important;
+}
+
+.aiAnalystApp.aiDashboardRoot .table tbody td {
+  border-top: 1px solid var(--ai-gridline) !important;
+}
+
+.aiAnalystApp.aiDashboardRoot.aiConsoleMode .table thead th {
+  background: rgba(23, 50, 77, 0.72) !important;
+}
+
+.aiAnalystApp.aiDashboardRoot.aiConsoleMode .table tbody tr:nth-child(odd) {
+  background: rgba(13, 36, 58, 0.34) !important;
+}
+
+.aiAnalystApp.aiDashboardRoot .form-check-input,
+.aiAnalystApp.aiDashboardRoot .form-switch .form-check-input {
+  border: 1px solid color-mix(in srgb, var(--ai-border) 90%, transparent) !important;
+  background-color: color-mix(in srgb, var(--ai-surface) 80%, transparent) !important;
+}
+
+.aiAnalystApp.aiDashboardRoot .form-check-input:checked {
+  background-color: var(--ai-accent) !important;
+  border-color: var(--ai-accent) !important;
+}

@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- ============================================================
+         SAVED REPORT VIEWS
+         ============================================================ -->
+
+    <record id="view_saved_report_tree" model="ir.ui.view">
+        <field name="name">ai.analyst.saved.report.tree</field>
+        <field name="model">ai.analyst.saved.report</field>
+        <field name="arch" type="xml">
+            <tree string="Saved Reports" default_order="write_date desc">
+                <field name="name"/>
+                <field name="user_query"/>
+                <field name="user_id"/>
+                <field name="is_pinned" widget="boolean_toggle"/>
+                <field name="create_date"/>
+                <field name="company_id" groups="base.group_multi_company"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_saved_report_form" model="ir.ui.view">
+        <field name="name">ai.analyst.saved.report.form</field>
+        <field name="model">ai.analyst.saved.report</field>
+        <field name="arch" type="xml">
+            <form string="Saved Report">
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="name"/>
+                            <field name="user_query"/>
+                            <field name="user_id"/>
+                            <field name="is_pinned"/>
+                        </group>
+                        <group>
+                            <field name="conversation_id"/>
+                            <field name="message_id"/>
+                            <field name="company_id" groups="base.group_multi_company"/>
+                            <field name="create_date"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Response Data" name="response">
+                            <field name="structured_response" widget="text"/>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_saved_report_search" model="ir.ui.view">
+        <field name="name">ai.analyst.saved.report.search</field>
+        <field name="model">ai.analyst.saved.report</field>
+        <field name="arch" type="xml">
+            <search string="Search Saved Reports">
+                <field name="name"/>
+                <field name="user_query"/>
+                <field name="user_id"/>
+                <filter name="pinned" string="Pinned" domain="[('is_pinned', '=', True)]"/>
+                <filter name="my_reports" string="My Reports" domain="[('user_id', '=', uid)]"/>
+                <group expand="0" string="Group By">
+                    <filter name="group_user" string="User" context="{'group_by': 'user_id'}"/>
+                    <filter name="group_date" string="Date" context="{'group_by': 'create_date:month'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_ai_analyst_saved_report" model="ir.actions.act_window">
+        <field name="name">Saved Reports</field>
+        <field name="res_model">ai.analyst.saved.report</field>
+        <field name="view_mode">tree,form</field>
+        <field name="search_view_id" ref="view_saved_report_search"/>
+        <field name="context">{'search_default_my_reports': 1}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                No saved reports yet
+            </p>
+            <p>
+                Save reports from the AI Analyst Chat to access them later.
+            </p>
+        </field>
+    </record>
+
+</odoo>
