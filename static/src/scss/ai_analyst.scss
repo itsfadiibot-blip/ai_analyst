@@ -11,34 +11,11 @@
   --ai-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
   color: var(--ai-text);
 
-  @media (prefers-color-scheme: dark) {
-    --ai-bg: #0b1120;
-    --ai-surface: rgba(15, 23, 42, 0.62);
-    --ai-surface-2: rgba(15, 23, 42, 0.45);
-    --ai-border: rgba(148, 163, 184, 0.12);
-    --ai-gridline: rgba(148, 163, 184, 0.12);
-    --ai-text: #e6edf8;
-    --ai-text-muted: rgba(230, 237, 248, 0.7);
-    --ai-accent: #66d9ff;
-    --ai-accent-glow: rgba(102, 217, 255, 0.28);
-    --ai-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
-  }
+  
 }
 
-.o_web_client.o_is_dark .aiAnalystApp,
-html[data-theme='dark'] .aiAnalystApp,
-body.o_dark .aiAnalystApp {
-  --ai-bg: #0b1120;
-  --ai-surface: rgba(15, 23, 42, 0.62);
-  --ai-surface-2: rgba(15, 23, 42, 0.45);
-  --ai-border: rgba(148, 163, 184, 0.12);
-  --ai-gridline: rgba(148, 163, 184, 0.12);
-  --ai-text: #e6edf8;
-  --ai-text-muted: rgba(230, 237, 248, 0.7);
-  --ai-accent: #66d9ff;
-  --ai-accent-glow: rgba(102, 217, 255, 0.28);
-  --ai-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
-}
+/* Dark-mode override disabled: keep Odoo light UI for AI Analyst */
+
 
 .ai-analyst-container {
   height: calc(100vh - 46px);
