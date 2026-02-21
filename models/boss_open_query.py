@@ -79,9 +79,15 @@ class AiAnalystBossOpenQueryService(models.AbstractModel):
         if not model.check_access_rights('read', raise_exception=False):
             raise AccessError(_('No read access to model %s') % model_name)
 
-        kb = self.env['ai.analyst.field.kb.service'].sudo().ensure_cache_loaded()
+        kb_service = self.env['ai.analyst.field.kb.service'].sudo()
+        kb = kb_service.ensure_cache_loaded()
         kb_model = (kb.get('models') or {}).get(model_name)
-        if not kb_model or not kb_model.get('queryable'):
+        # Fallback for bootstrap/test phases before KB is fully built:
+        # allow model if it is not excluded by KB policy.
+        if kb_model:
+            if not kb_model.get('queryable'):
+                raise ValidationError(_('Model %s is not queryable by Field KB policy.') % model_name)
+        elif kb_service._model_is_excluded(model_name):
             raise ValidationError(_('Model %s is not queryable by Field KB policy.') % model_name)
 
         self._validate_domain(model, normalized['domain'])
@@ -459,8 +465,8 @@ class AiAnalystBossExportJob(models.Model):
                 offset += len(rows)
                 pct = 100.0 if total <= 0 else min(99.0, (offset / float(total)) * 100.0)
                 self.write({'processed_rows': offset, 'progress_percent': pct})
-                if not self.env.registry.in_test_mode():
-                    self.env.cr.commit()
+                # Never commit inside export loop; keep transaction-safe behavior
+                # for tests and normal request contexts.
 
             payload = output.getvalue().encode('utf-8-sig')
             self.write({

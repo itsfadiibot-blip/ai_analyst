@@ -28,8 +28,8 @@ class AiAnalystFieldKbModel(models.Model):
     name = fields.Char(required=True, index=True)
     model_description = fields.Char()
     module_ids = fields.Char()
-    is_transient = fields.Boolean(default=False)
-    is_abstract = fields.Boolean(default=False)
+    is_transient_model = fields.Boolean(default=False, string='Is Transient')
+    is_abstract_model = fields.Boolean(default=False, string='Is Abstract')
     company_dependent = fields.Boolean(default=False)
     record_count_approx = fields.Integer(default=0)
     semantic_tags = fields.Char()
@@ -71,6 +71,9 @@ class AiAnalystFieldKbField(models.Model):
         ('boolean', 'Boolean'), ('char', 'Char'), ('integer', 'Integer'), ('float', 'Float'), ('monetary', 'Monetary'),
         ('date', 'Date'), ('datetime', 'Datetime'), ('many2one', 'Many2one'), ('one2many', 'One2many'), ('many2many', 'Many2many'),
         ('selection', 'Selection'), ('text', 'Text'), ('html', 'Html'), ('binary', 'Binary'), ('reference', 'Reference'),
+        ('many2one_reference', 'Many2one Reference'), ('id', 'ID'), ('serialized', 'Serialized'),
+        ('properties', 'Properties'), ('properties_definition', 'Properties Definition'),
+        ('json', 'JSON'),
     ], required=True)
     relation = fields.Char()
     relation_field = fields.Char()
@@ -183,6 +186,21 @@ class AiAnalystFieldKbService(models.AbstractModel):
                 return True
         return False
 
+    def _safe_count(self, model_name):
+        """Safely get record count for a model, handling abstract/mixin models without tables."""
+        try:
+            if model_name not in self.env:
+                return 0
+            model = self.env[model_name]
+            # Skip models without actual database tables (abstract, mixin)
+            if not hasattr(model, '_auto') or not model._auto:
+                return 0
+            if hasattr(model, '_abstract') and model._abstract:
+                return 0
+            return model.sudo().search_count([])
+        except Exception:
+            return 0
+
     def _field_signature(self, f):
         selection = ''
         if getattr(f, 'selection', False):
@@ -264,6 +282,10 @@ class AiAnalystFieldKbService(models.AbstractModel):
                 continue
             if model_name not in self.env:
                 continue
+            # Skip abstract/mixin models without actual database tables
+            model_cls = self.env[model_name]
+            if not getattr(model_cls, '_auto', True) or getattr(model_cls, '_abstract', False):
+                continue
             seen_models.add(model_name)
             field_defs = self.env['ir.model.fields'].sudo().search([('model', '=', model_name)])
             model_sig = self._model_signature(field_defs)
@@ -272,12 +294,13 @@ class AiAnalystFieldKbService(models.AbstractModel):
                 'name': model_name,
                 'model_description': ir_model.name,
                 'module_ids': ir_model.modules,
-                'is_transient': bool(ir_model.transient),
+                'is_transient_model': bool(ir_model.transient),
+                'is_abstract_model': bool(getattr(ir_model, '_abstract', False)),
                 'is_queryable': not self._model_is_excluded(model_name),
                 'signature': model_sig,
                 'last_refreshed_at': fields.Datetime.now(),
                 'company_id': self.env.company.id,
-                'record_count_approx': self.env[model_name].sudo().search_count([]) if model_name in self.env else 0,
+                'record_count_approx': self._safe_count(model_name),
             }
             if kb_model:
                 if kb_model.signature == model_sig and not full:
@@ -358,7 +381,7 @@ class AiAnalystFieldKbService(models.AbstractModel):
         self.env['ai.analyst.audit.log'].sudo().create({
             'user_id': self.env.user.id,
             'company_id': self.env.company.id,
-            'event_type': 'field_kb_rebuild',
+            'event_type': 'response',
             'summary': 'Field KB rebuild complete',
             'error_message': json.dumps({
                 'models_scanned': scanned_models,

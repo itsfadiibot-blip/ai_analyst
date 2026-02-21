@@ -210,10 +210,22 @@ class AiAnalystGateway(models.AbstractModel):
                     max_tokens=provider_config.max_tokens,
                     temperature=provider_config.temperature,
                 )
+                # Persist iterative tool context across rounds (prevents re-trying the same plan forever)
+                messages = messages_with_tools
 
             # --- Parse the final response ---
             elapsed_ms = int((time.time() - start_time) * 1000)
-            structured = self._parse_ai_response(ai_response.content)
+            if ai_response.tool_calls and tool_call_count >= max_tool_calls:
+                structured = {
+                    'answer': (
+                        'I could not complete this query within the tool-call limit. '
+                        'Please narrow the request (date range / filters) or verify the requested dimension mapping '
+                        '(for example, season code mapping like FW25).'
+                    ),
+                    'error': 'Tool-call limit reached before final answer.',
+                }
+            else:
+                structured = self._parse_ai_response(ai_response.content)
 
             # Add meta information
             structured['meta'] = {
@@ -285,8 +297,8 @@ class AiAnalystGateway(models.AbstractModel):
     # Private helpers
     # ------------------------------------------------------------------
 
-
-        """Build the system prompt with context variables and optional workspace context."""
+    def _build_system_prompt(self, user, company, workspace_ctx=None, user_message=''):
+        """Build the system prompt with context variables and optional workspace/field-KB context."""
         user_tz = user.tz or 'UTC'
         currency = company.currency_id.name or 'USD'
         prompt = SYSTEM_PROMPT_TEMPLATE.format(
