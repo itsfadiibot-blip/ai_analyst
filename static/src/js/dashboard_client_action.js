@@ -18,39 +18,17 @@ class AiAnalystDashboardAction extends Component {
             loading: true,
             results: {},
             widgetLoading: {},
-            consoleMode: false,
         });
         this._timers = {};
         this._chartInstances = {};
 
         onMounted(async () => {
-            await this.loadConsoleMode();
             await this.load();
         });
         onWillUnmount(() => {
             Object.values(this._timers).forEach((t) => clearInterval(t));
             Object.values(this._chartInstances).forEach((c) => c?.destroy?.());
         });
-    }
-
-    async loadConsoleMode() {
-        try {
-            const res = await this.rpc('/ai_analyst/ui/get_console_mode', {});
-            this.state.consoleMode = !!res.enabled;
-        } catch (e) {
-            this.state.consoleMode = false;
-        }
-    }
-
-    async toggleConsoleMode(ev) {
-        const enabled = !!ev.target.checked;
-        this.state.consoleMode = enabled;
-        try {
-            await this.rpc('/ai_analyst/ui/set_console_mode', { enabled });
-        } catch (e) {
-            this.state.consoleMode = !enabled;
-            this.notification.add('Failed to update Console Mode.', { type: 'danger' });
-        }
     }
 
     async load() {

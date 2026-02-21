@@ -2,7 +2,7 @@
 <templates xml:space="preserve">
 
     <t t-name="ai_analyst.AiAnalystAction">
-        <div t-att-class="'ai-analyst-container aiAnalystApp d-flex h-100 ' + (state.consoleMode ? 'aiConsoleMode' : '')">
+        <div class="ai-analyst-container aiAnalystApp d-flex h-100">
 
             <!-- ============================================================
                  SIDEBAR — Conversation list
@@ -72,10 +72,6 @@
                             New Conversation
                         </t>
                     </span>
-                    <label class="form-check form-switch m-0 d-flex align-items-center gap-1">
-                        <input class="form-check-input" type="checkbox" t-att-checked="state.consoleMode" t-on-change="toggleConsoleMode"/>
-                        <span class="small">Console Mode</span>
-                    </label>
                 </div>
 
                 <!-- Messages area -->
