@@ -269,6 +269,24 @@ class AiAnalystAction extends Component {
         }
     }
 
+    async deleteConversation(conversationId) {
+        const ok = window.confirm("Delete this conversation permanently?");
+        if (!ok) return;
+        try {
+            await this.rpc("/ai_analyst/conversation/delete", {
+                conversation_id: conversationId,
+            });
+            this.loadConversations();
+            if (this.state.currentConversationId === conversationId) {
+                this.startNewChat();
+            }
+            this.notification.add("Conversation deleted.", { type: "success" });
+        } catch (e) {
+            console.error("Failed to delete conversation:", e);
+            this.notification.add("Failed to delete conversation.", { type: "danger" });
+        }
+    }
+
     // ------------------------------------------------------------------
     // Actions: Save, Pin, Download
     // ------------------------------------------------------------------

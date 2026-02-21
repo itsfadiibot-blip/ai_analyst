@@ -173,6 +173,18 @@ class AiAnalystController(http.Controller):
         conversation.action_archive()
         return {'success': True}
 
+    @http.route('/ai_analyst/conversation/delete', type='json', auth='user', methods=['POST'])
+    def delete_conversation(self, conversation_id, **kwargs):
+        """Permanently delete a conversation and its messages."""
+        user = request.env.user
+        conversation = request.env['ai.analyst.conversation'].browse(int(conversation_id))
+
+        if not conversation.exists() or conversation.user_id.id != user.id:
+            return {'error': 'Conversation not found or access denied.'}
+
+        conversation.unlink()
+        return {'success': True}
+
     # ------------------------------------------------------------------
     # Saved reports
     # ------------------------------------------------------------------

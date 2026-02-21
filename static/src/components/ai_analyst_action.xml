@@ -21,14 +21,23 @@
                         <div t-att-class="'ai-analyst-conv-item p-2 px-3 border-bottom cursor-pointer '
                              + (state.currentConversationId === conv.id ? 'bg-primary-subtle' : '')"
                              t-on-click="() => this.selectConversation(conv.id)">
-                            <div class="fw-semibold text-truncate" style="font-size: 13px;">
-                                <t t-esc="conv.name || 'Untitled'"/>
-                            </div>
-                            <div class="text-muted" style="font-size: 11px;">
-                                <t t-esc="formatDate(conv.write_date)"/>
-                                <span class="ms-2 badge bg-secondary-subtle text-secondary">
-                                    <t t-esc="conv.message_count"/> msgs
-                                </span>
+                            <div class="d-flex align-items-start justify-content-between gap-2">
+                                <div class="flex-grow-1" style="min-width:0;">
+                                    <div class="fw-semibold text-truncate" style="font-size: 13px;">
+                                        <t t-esc="conv.name || 'Untitled'"/>
+                                    </div>
+                                    <div class="text-muted" style="font-size: 11px;">
+                                        <t t-esc="formatDate(conv.write_date)"/>
+                                        <span class="ms-2 badge bg-secondary-subtle text-secondary">
+                                            <t t-esc="conv.message_count"/> msgs
+                                        </span>
+                                    </div>
+                                </div>
+                                <button class="btn btn-sm btn-outline-danger py-0 px-2"
+                                        title="Delete conversation"
+                                        t-on-click.stop="() => this.deleteConversation(conv.id)">
+                                    🗑
+                                </button>
                             </div>
                         </div>
                     </t>
