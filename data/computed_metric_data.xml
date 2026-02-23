@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+        <record id="metric_sell_through" model="ai.analyst.computed.metric">
+            <field name="name">Sell Through</field>
+            <field name="code">sell_through</field>
+            <field name="formula">sold_qty / (sold_qty + current_stock) if (sold_qty + current_stock) else 0</field>
+            <field name="output_format">percentage</field>
+        </record>
+        <record id="metric_stock_coverage_days" model="ai.analyst.computed.metric">
+            <field name="name">Stock Coverage Days</field>
+            <field name="code">stock_coverage_days</field>
+            <field name="formula">current_stock / avg_daily_sales if avg_daily_sales else 0</field>
+            <field name="output_format">number</field>
+        </record>
+    </data>
+</odoo>

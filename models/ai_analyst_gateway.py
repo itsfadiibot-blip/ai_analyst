@@ -8,12 +8,12 @@ response formatting, and audit logging.
 """
 import json
 import logging
+import re
 import time
 from datetime import date, datetime
 
 from odoo import models, fields, api, _
 from odoo.exceptions import UserError, ValidationError, AccessError
-from . import ai_analyst_model_router  # noqa: F401
 
 _logger = logging.getLogger(__name__)
 
@@ -127,18 +127,13 @@ class AiAnalystGateway(models.AbstractModel):
         )
 
         try:
-            # --- Resolve workspace context (revalidated on each request) ---
-            workspace = conversation.workspace_id
-            workspace_ctx = self._resolve_workspace_context(workspace, user)
+            if self._universal_query_enabled() and self._classify_intent(user_message) == 'universal_query':
+                return self._run_universal_query(conversation, user, company, user_message, start_time)
 
-            # --- Get provider via model router ---
-            router = self.env['ai.analyst.model.router']
-            history_for_routing = conversation.get_history_for_ai(
-                max_messages=int(self.env['ir.config_parameter'].sudo().get_param(
-                    'ai_analyst.max_history_messages', DEFAULT_MAX_HISTORY_MESSAGES
-                ))
+            # --- Get provider ---
+            provider_config = self.env['ai.analyst.provider.config'].get_default_provider(
+                company_id=company.id
             )
-            provider_config = router.select_provider(user, workspace, user_message, history_for_routing)
             if not provider_config:
                 return self._error_response(
                     'No AI provider configured. Please contact your administrator.'
@@ -146,8 +141,12 @@ class AiAnalystGateway(models.AbstractModel):
 
             provider = self._get_provider_instance(provider_config)
 
+            # --- Resolve workspace context (revalidated on each request) ---
+            workspace = conversation.workspace_id
+            workspace_ctx = self._resolve_workspace_context(workspace, user)
+
             # --- Build messages for the AI ---
-            system_prompt = self._build_system_prompt(user, company, workspace_ctx, user_message=user_message)
+            system_prompt = self._build_system_prompt(user, company, workspace_ctx)
             history = conversation.get_history_for_ai(
                 max_messages=int(self.env['ir.config_parameter'].sudo().get_param(
                     'ai_analyst.max_history_messages', DEFAULT_MAX_HISTORY_MESSAGES
@@ -180,27 +179,6 @@ class AiAnalystGateway(models.AbstractModel):
                 max_tokens=provider_config.max_tokens,
                 temperature=provider_config.temperature,
             )
-
-            # Escalate model immediately when router detects low-quality first response
-            if router.should_escalate(ai_response, [], provider_config.cost_tier):
-                escalated_config = router._get_escalation_provider(provider_config)
-                if escalated_config and escalated_config.id != provider_config.id:
-                    self._log_audit(
-                        user, company, 'model_escalation',
-                        summary=f'Escalated from {provider_config.model_name} to {escalated_config.model_name}',
-                        conversation_id=conversation.id,
-                        provider=escalated_config.provider_type,
-                        model_name=escalated_config.model_name,
-                    )
-                    provider_config = escalated_config
-                    provider = self._get_provider_instance(provider_config)
-                    ai_response = provider.chat(
-                        system=system_prompt,
-                        messages=messages,
-                        tools=tool_schemas,
-                        max_tokens=provider_config.max_tokens,
-                        temperature=provider_config.temperature,
-                    )
 
             while ai_response.tool_calls and tool_call_count < max_tool_calls:
                 tool_results = []
@@ -236,22 +214,10 @@ class AiAnalystGateway(models.AbstractModel):
                     max_tokens=provider_config.max_tokens,
                     temperature=provider_config.temperature,
                 )
-                # Persist iterative tool context across rounds (prevents re-trying the same plan forever)
-                messages = messages_with_tools
 
             # --- Parse the final response ---
             elapsed_ms = int((time.time() - start_time) * 1000)
-            if ai_response.tool_calls and tool_call_count >= max_tool_calls:
-                structured = {
-                    'answer': (
-                        'I could not complete this query within the tool-call limit. '
-                        'Please narrow the request (date range / filters) or verify the requested dimension mapping '
-                        '(for example, season code mapping like FW25).'
-                    ),
-                    'error': 'Tool-call limit reached before final answer.',
-                }
-            else:
-                structured = self._parse_ai_response(ai_response.content)
+            structured = self._parse_ai_response(ai_response.content)
 
             # Add meta information
             structured['meta'] = {
@@ -323,8 +289,75 @@ class AiAnalystGateway(models.AbstractModel):
     # Private helpers
     # ------------------------------------------------------------------
 
-    def _build_system_prompt(self, user, company, workspace_ctx=None, user_message=''):
-        """Build the system prompt with context variables and optional workspace/field-KB context."""
+    def _universal_query_enabled(self):
+        return str(self.env['ir.config_parameter'].sudo().get_param('ai_analyst.universal_query_enabled', 'True')).lower() in ('1', 'true', 'yes')
+
+    def _classify_intent(self, message):
+        text = (message or '').lower()
+        if any(k in text for k in ['hi', 'hello', 'how are you']) and len(text.split()) <= 6:
+            return 'chitchat'
+        if re.search(r'\b(sales|stock|inventory|margin|orders|count|revenue|pos|purchase|top)\b', text):
+            return 'universal_query'
+        return 'specialized_tool'
+
+    def _run_universal_query(self, conversation, user, company, user_message, start_time):
+        planner = self.env['ai.analyst.query.planner']
+        validator = self.env['ai.analyst.query.plan.validator']
+        orchestrator = self.env['ai.analyst.query.orchestrator']
+        cache_model = self.env['ai.analyst.query.cache']
+
+        tier_chain = ['cheap', 'standard', 'premium']
+        plan = None
+        validation = {'valid': False, 'errors': ['no plan'], 'warnings': []}
+        escalation_trace = []
+        for tier in tier_chain:
+            candidate = planner.plan(user=user, question=user_message, conversation_context={'conversation_id': conversation.id}, tier=tier)
+            verdict = validator.validate(user, candidate)
+            escalation_trace.append({'tier': tier, 'valid': verdict['valid'], 'errors': verdict.get('errors', [])[:2]})
+            if verdict['valid']:
+                plan = candidate
+                validation = verdict
+                break
+        if not plan:
+            return self._error_response('Unable to build a safe query plan: %s' % '; '.join(validation['errors'][:3]))
+
+        cached = cache_model.get_cached(plan)
+        payload = cached if cached is not None else orchestrator.run(user, plan)
+        if cached is None:
+            cache_model.set_cached(plan, payload, ttl_seconds=300)
+
+        elapsed_ms = int((time.time() - start_time) * 1000)
+        explain_mode = 'explain' in (user_message or '').lower() and 'plan' in (user_message or '').lower()
+        answer = 'Universal query executed successfully.' if not explain_mode else 'Plan generated and validated. Execution included.'
+        table_rows = []
+        if plan.get('steps'):
+            first = payload['steps'].get(plan['steps'][0]['id'])
+            table_rows = first if isinstance(first, list) else [first]
+
+        structured = {
+            'answer': answer,
+            'table': {'columns': [], 'rows': table_rows, 'total_row': None},
+            'meta': {
+                'route': 'universal_query',
+                'query_plan': plan,
+                'validation': validation,
+                'cached': cached is not None,
+                'escalation_trace': escalation_trace,
+                'total_time_ms': elapsed_ms,
+            },
+        }
+
+        self.env['ai.analyst.message'].create({
+            'conversation_id': conversation.id,
+            'role': 'assistant',
+            'content': answer,
+            'structured_response': json.dumps(structured, default=str),
+            'processing_time_ms': elapsed_ms,
+        })
+        return structured
+
+    def _build_system_prompt(self, user, company, workspace_ctx=None):
+        """Build the system prompt with context variables and optional workspace context."""
         user_tz = user.tz or 'UTC'
         currency = company.currency_id.name or 'USD'
         prompt = SYSTEM_PROMPT_TEMPLATE.format(
@@ -337,26 +370,13 @@ class AiAnalystGateway(models.AbstractModel):
         # Inject dimension dictionary context
         prompt += "\n\nDIMENSION DICTIONARY:\n" + self._build_dimension_prompt_context(user)
 
-        # Inject Field KB context for boss_open_query when available
-        try:
-            if user.has_group('ai_analyst.group_boss_open_query'):
-                icp = self.env['ir.config_parameter'].sudo()
-                if icp.get_param('ai_analyst.field_kb_needs_refresh', default='False') == 'True':
-                    self.env['ai.analyst.field.kb.service'].sudo().cron_refresh_kb()
-                    icp.set_param('ai_analyst.field_kb_needs_refresh', 'False')
-                kb_ctx = self.env['ai.analyst.field.kb.service'].with_user(user).build_field_context_text(user_message or '')
-                if kb_ctx.get('prompt_block'):
-                    prompt += "\n\n" + kb_ctx['prompt_block']
-        except Exception:
-            _logger.exception('Failed to append Field KB context to system prompt')
-
         # Inject workspace-specific context after the base prompt
         if workspace_ctx and workspace_ctx.get('system_prompt_extra'):
             prompt += "\n\nWORKSPACE CONTEXT:\n" + workspace_ctx['system_prompt_extra']
         return prompt
 
     def _build_dimension_prompt_context(self, user):
-        env_u = self.with_user(user).env
+        env_u = self.env.with_user(user)
         dimensions = env_u['ai.analyst.dimension'].search([
             ('is_active', '=', True),
             '|', ('company_id', '=', False), ('company_id', 'in', user.company_ids.ids),

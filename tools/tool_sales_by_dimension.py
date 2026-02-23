@@ -1,11 +1,4 @@
 # -*- coding: utf-8 -*-
-"""Tool: get_sales_by_dimension - Sales grouped by configurable dimensions with synonym-aware filters.
-
-FIXED: Dimension field paths now use correct custom fields:
-- Season: x_studio_many2many_field_IXz60
-- Brand: x_studio_many2one_field_mG9Pn
-- Category: x_sfcc_primary_category
-"""
 import re
 from datetime import datetime
 
@@ -31,7 +24,7 @@ class SalesByDimensionTool(BaseTool):
             },
             'filters': {
                 'type': 'object',
-                'description': 'Dimension filters keyed by dimension code',
+                'description': 'Dimension filters keyed by dimension code. Values can be string or list.',
                 'default': {},
             },
         },
@@ -64,7 +57,6 @@ class SalesByDimensionTool(BaseTool):
             ('order_id.company_id', '=', user.company_id.id),
             ('order_id.date_order', '>=', f'{date_from} 00:00:00'),
             ('order_id.date_order', '<=', f'{date_to} 23:59:59'),
-            ('display_type', '=', False),
         ]
 
         resolved_filters = {}

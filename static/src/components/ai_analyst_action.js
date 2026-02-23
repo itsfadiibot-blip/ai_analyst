@@ -37,7 +37,6 @@ class AiAnalystAction extends Component {
             workspaces: [],
             selectedWorkspaceId: null,
             workspacePrompts: [],
-            workspaceToolNames: [],
         });
 
         this.chatContainerRef = useRef("chatContainer");
@@ -47,6 +46,7 @@ class AiAnalystAction extends Component {
         this._chartInstances = {};
 
         onMounted(() => {
+            this.loadConsoleMode();
             this.loadConversations();
             this.loadWorkspaces();
             if (this.inputRef.el) {
@@ -68,6 +68,26 @@ class AiAnalystAction extends Component {
     // Data loading
     // ------------------------------------------------------------------
 
+    async loadConsoleMode() {
+        try {
+            const result = await this.rpc("/ai_analyst/ui/get_console_mode", {});
+            this.state.consoleMode = !!result.enabled;
+        } catch (e) {
+            console.error("Failed to load console mode:", e);
+        }
+    }
+
+    async toggleConsoleMode(ev) {
+        const enabled = !!ev.target.checked;
+        this.state.consoleMode = enabled;
+        try {
+            await this.rpc("/ai_analyst/ui/set_console_mode", { enabled });
+        } catch (e) {
+            this.state.consoleMode = !enabled;
+            console.error("Failed to set console mode:", e);
+        }
+    }
+
     async loadConversations() {
         try {
             const result = await this.rpc("/ai_analyst/conversations", {});
@@ -85,7 +105,6 @@ class AiAnalystAction extends Component {
         try {
             const result = await this.rpc("/ai_analyst/workspaces", {});
             this.state.workspaces = result.workspaces || [];
-            await this.loadVisibleTools(null);
         } catch (e) {
             console.error("Failed to load workspaces:", e);
         }
@@ -97,7 +116,6 @@ class AiAnalystAction extends Component {
             await this.loadWorkspaceContext(workspaceId);
         } else {
             this.state.workspacePrompts = [];
-            await this.loadVisibleTools(null);
         }
         // Start a new conversation when switching workspace
         this.startNewChat();
@@ -111,29 +129,12 @@ class AiAnalystAction extends Component {
             if (result.error) {
                 console.error("Workspace context error:", result.error);
                 this.state.workspacePrompts = [];
-                this.state.workspaceToolNames = [];
                 return;
             }
             this.state.workspacePrompts = result.prompts || [];
-            this.state.workspaceToolNames = result.tool_names || [];
-            if (!this.state.workspaceToolNames.length) {
-                await this.loadVisibleTools(workspaceId);
-            }
         } catch (e) {
             console.error("Failed to load workspace context:", e);
             this.state.workspacePrompts = [];
-            this.state.workspaceToolNames = [];
-        }
-    }
-
-    async loadVisibleTools(workspaceId = null) {
-        try {
-            const payload = workspaceId ? { workspace_id: workspaceId } : {};
-            const result = await this.rpc("/ai_analyst/tools/list", payload);
-            this.state.workspaceToolNames = result.tool_names || [];
-        } catch (e) {
-            console.error("Failed to load tools list:", e);
-            this.state.workspaceToolNames = [];
         }
     }
 
@@ -245,24 +246,6 @@ class AiAnalystAction extends Component {
             }
         } catch (e) {
             console.error("Failed to archive:", e);
-        }
-    }
-
-    async deleteConversation(conversationId) {
-        const ok = window.confirm("Delete this conversation permanently?");
-        if (!ok) return;
-        try {
-            await this.rpc("/ai_analyst/conversation/delete", {
-                conversation_id: conversationId,
-            });
-            this.loadConversations();
-            if (this.state.currentConversationId === conversationId) {
-                this.startNewChat();
-            }
-            this.notification.add("Conversation deleted.", { type: "success" });
-        } catch (e) {
-            console.error("Failed to delete conversation:", e);
-            this.notification.add("Failed to delete conversation.", { type: "danger" });
         }
     }
 

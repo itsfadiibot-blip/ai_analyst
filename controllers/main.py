@@ -173,18 +173,6 @@ class AiAnalystController(http.Controller):
         conversation.action_archive()
         return {'success': True}
 
-    @http.route('/ai_analyst/conversation/delete', type='json', auth='user', methods=['POST'])
-    def delete_conversation(self, conversation_id, **kwargs):
-        """Permanently delete a conversation and its messages."""
-        user = request.env.user
-        conversation = request.env['ai.analyst.conversation'].browse(int(conversation_id))
-
-        if not conversation.exists() or conversation.user_id.id != user.id:
-            return {'error': 'Conversation not found or access denied.'}
-
-        conversation.unlink()
-        return {'success': True}
-
     # ------------------------------------------------------------------
     # Saved reports
     # ------------------------------------------------------------------
@@ -385,14 +373,7 @@ class AiAnalystController(http.Controller):
                     'icon': item['icon'],
                 })
 
-        # Tool names visible to this user in this workspace
-        from odoo.addons.ai_analyst.tools.registry import get_available_tools_for_user
-        user_tools = get_available_tools_for_user(user)
-        workspace_allowed = workspace.get_allowed_tool_names()
-        if workspace_allowed:
-            tool_names = sorted([name for name in user_tools.keys() if name in workspace_allowed])
-        else:
-            tool_names = sorted(list(user_tools.keys()))
+        tool_names = list(workspace.get_allowed_tool_names())
 
         return {
             'workspace_id': workspace.id,
@@ -402,27 +383,3 @@ class AiAnalystController(http.Controller):
             'tool_names': tool_names,
             'dashboard_id': workspace.default_dashboard_id.id if workspace.default_dashboard_id else None,
         }
-
-    @http.route('/ai_analyst/tools/list', type='json', auth='user', methods=['POST'])
-    def list_tools(self, workspace_id=None, **kwargs):
-        """List tool names visible to the current user (optionally scoped by workspace)."""
-        user = request.env.user
-        if not user.has_group('ai_analyst.group_ai_user'):
-            return {'tool_names': []}
-
-        from odoo.addons.ai_analyst.tools.registry import get_available_tools_for_user
-        user_tools = get_available_tools_for_user(user)
-        tool_names = sorted(list(user_tools.keys()))
-
-        if workspace_id:
-            workspace = request.env['ai.analyst.workspace'].browse(int(workspace_id))
-            if not workspace.exists() or not workspace.is_active:
-                return {'tool_names': []}
-            if not workspace.user_has_access(user):
-                raise AccessError("You don't have access to that workspace.")
-
-            allowed = workspace.get_allowed_tool_names()
-            if allowed:
-                tool_names = [name for name in tool_names if name in allowed]
-
-        return {'tool_names': tool_names}

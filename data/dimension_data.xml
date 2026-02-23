@@ -2,7 +2,6 @@
 <odoo>
     <data noupdate="1">
 
-        <!-- Gender - embedded in product name -->
         <record id="ai_dimension_gender" model="ai.analyst.dimension">
             <field name="name">Gender</field>
             <field name="code">gender</field>
@@ -11,7 +10,6 @@
             <field name="sequence">10</field>
         </record>
 
-        <!-- Age Group - embedded in product name -->
         <record id="ai_dimension_age_group" model="ai.analyst.dimension">
             <field name="name">Age Group</field>
             <field name="code">age_group</field>
@@ -20,37 +18,30 @@
             <field name="sequence">20</field>
         </record>
 
-        <!-- FIXED: Brand stored in x_studio_many2one_field_mG9Pn → x_brand -->
         <record id="ai_dimension_brand" model="ai.analyst.dimension">
             <field name="name">Brand</field>
             <field name="code">brand</field>
             <field name="model_name">sale.order.line</field>
-            <!-- FIXED: was product_id.default_code, now uses real brand field -->
-            <field name="field_name">product_id.product_tmpl_id.x_studio_many2one_field_mG9Pn.name</field>
+            <field name="field_name">product_id.product_tmpl_id.name</field>
             <field name="sequence">30</field>
         </record>
 
-        <!-- FIXED: Category stored in x_sfcc_primary_category (NOT categ_id which is always "All") -->
         <record id="ai_dimension_category" model="ai.analyst.dimension">
             <field name="name">Category</field>
             <field name="code">category</field>
             <field name="model_name">sale.order.line</field>
-            <!-- FIXED: was product_id.categ_id.name (always "All"), now uses SFCC category -->
-            <field name="field_name">product_id.product_tmpl_id.x_sfcc_primary_category</field>
+            <field name="field_name">product_id.categ_id.name</field>
             <field name="sequence">40</field>
         </record>
 
-        <!-- FIXED: Season stored in x_studio_many2many_field_IXz60 → x_product_tags -->
         <record id="ai_dimension_season" model="ai.analyst.dimension">
             <field name="name">Season</field>
             <field name="code">season</field>
             <field name="model_name">sale.order.line</field>
-            <!-- FIXED: was product_tag_ids or default_code, now uses real custom season field -->
-            <field name="field_name">product_id.product_tmpl_id.x_studio_many2many_field_IXz60.name</field>
+            <field name="field_name">product_id.product_tmpl_id.default_code</field>
             <field name="sequence">50</field>
         </record>
 
-        <!-- Color - embedded in product name -->
         <record id="ai_dimension_color" model="ai.analyst.dimension">
             <field name="name">Color</field>
             <field name="code">color</field>
@@ -59,7 +50,7 @@
             <field name="sequence">60</field>
         </record>
 
-        <!-- Gender Synonyms -->
+        <!-- Gender -->
         <record id="ai_syn_gender_men" model="ai.analyst.dimension.synonym">
             <field name="dimension_id" ref="ai_dimension_gender"/>
             <field name="synonym">men</field>
@@ -67,17 +58,17 @@
             <field name="match_type">contains</field>
             <field name="priority">1</field>
         </record>
-        <record id="ai_syn_gender_boys" model="ai.analyst.dimension.synonym">
+        <record id="ai_syn_gender_male" model="ai.analyst.dimension.synonym">
             <field name="dimension_id" ref="ai_dimension_gender"/>
-            <field name="synonym">boys</field>
-            <field name="canonical_value">Boys</field>
+            <field name="synonym">male</field>
+            <field name="canonical_value">Men</field>
             <field name="match_type">contains</field>
             <field name="priority">2</field>
         </record>
-        <record id="ai_syn_gender_boy" model="ai.analyst.dimension.synonym">
+        <record id="ai_syn_gender_boys" model="ai.analyst.dimension.synonym">
             <field name="dimension_id" ref="ai_dimension_gender"/>
-            <field name="synonym">boy</field>
-            <field name="canonical_value">Boys</field>
+            <field name="synonym">boys</field>
+            <field name="canonical_value">Men</field>
             <field name="match_type">contains</field>
             <field name="priority">3</field>
         </record>
@@ -88,193 +79,123 @@
             <field name="match_type">contains</field>
             <field name="priority">4</field>
         </record>
-        <record id="ai_syn_gender_girls" model="ai.analyst.dimension.synonym">
+        <record id="ai_syn_gender_female" model="ai.analyst.dimension.synonym">
             <field name="dimension_id" ref="ai_dimension_gender"/>
-            <field name="synonym">girls</field>
-            <field name="canonical_value">Girls</field>
+            <field name="synonym">female</field>
+            <field name="canonical_value">Women</field>
             <field name="match_type">contains</field>
             <field name="priority">5</field>
         </record>
-        <record id="ai_syn_gender_girl" model="ai.analyst.dimension.synonym">
+        <record id="ai_syn_gender_ladies" model="ai.analyst.dimension.synonym">
             <field name="dimension_id" ref="ai_dimension_gender"/>
-            <field name="synonym">girl</field>
-            <field name="canonical_value">Girls</field>
+            <field name="synonym">ladies</field>
+            <field name="canonical_value">Women</field>
             <field name="match_type">contains</field>
             <field name="priority">6</field>
         </record>
-        <record id="ai_syn_gender_unisex" model="ai.analyst.dimension.synonym">
+        <record id="ai_syn_gender_girls" model="ai.analyst.dimension.synonym">
             <field name="dimension_id" ref="ai_dimension_gender"/>
-            <field name="synonym">unisex</field>
-            <field name="canonical_value">Unisex</field>
+            <field name="synonym">girls</field>
+            <field name="canonical_value">Women</field>
             <field name="match_type">contains</field>
             <field name="priority">7</field>
         </record>
 
-        <!-- Age Group Synonyms -->
-        <record id="ai_syn_age_baby" model="ai.analyst.dimension.synonym">
-            <field name="dimension_id" ref="ai_dimension_age_group"/>
-            <field name="synonym">baby</field>
-            <field name="canonical_value">Baby</field>
-            <field name="match_type">contains</field>
-            <field name="priority">1</field>
-        </record>
-        <record id="ai_syn_age_infant" model="ai.analyst.dimension.synonym">
-            <field name="dimension_id" ref="ai_dimension_age_group"/>
-            <field name="synonym">infant</field>
-            <field name="canonical_value">Baby</field>
-            <field name="match_type">contains</field>
-            <field name="priority">2</field>
-        </record>
-        <record id="ai_syn_age_toddler" model="ai.analyst.dimension.synonym">
-            <field name="dimension_id" ref="ai_dimension_age_group"/>
-            <field name="synonym">toddler</field>
-            <field name="canonical_value">Toddler</field>
-            <field name="match_type">contains</field>
-            <field name="priority">3</field>
-        </record>
+        <!-- Age Group -->
         <record id="ai_syn_age_kids" model="ai.analyst.dimension.synonym">
             <field name="dimension_id" ref="ai_dimension_age_group"/>
             <field name="synonym">kids</field>
             <field name="canonical_value">Kids</field>
             <field name="match_type">contains</field>
-            <field name="priority">4</field>
+            <field name="priority">1</field>
         </record>
         <record id="ai_syn_age_children" model="ai.analyst.dimension.synonym">
             <field name="dimension_id" ref="ai_dimension_age_group"/>
             <field name="synonym">children</field>
             <field name="canonical_value">Kids</field>
             <field name="match_type">contains</field>
-            <field name="priority">5</field>
-        </record>
-        <record id="ai_syn_age_teen" model="ai.analyst.dimension.synonym">
-            <field name="dimension_id" ref="ai_dimension_age_group"/>
-            <field name="synonym">teen</field>
-            <field name="canonical_value">Teen</field>
-            <field name="match_type">contains</field>
-            <field name="priority">6</field>
-        </record>
-
-        <!-- Brand Synonyms - Common kids fashion brands -->
-        <record id="ai_syn_brand_mayoral" model="ai.analyst.dimension.synonym">
-            <field name="dimension_id" ref="ai_dimension_brand"/>
-            <field name="synonym">mayoral</field>
-            <field name="canonical_value">Mayoral</field>
-            <field name="match_type">contains</field>
-            <field name="priority">1</field>
-        </record>
-        <record id="ai_syn_brand_guess" model="ai.analyst.dimension.synonym">
-            <field name="dimension_id" ref="ai_dimension_brand"/>
-            <field name="synonym">guess</field>
-            <field name="canonical_value">Guess</field>
-            <field name="match_type">contains</field>
             <field name="priority">2</field>
         </record>
-        <record id="ai_syn_brand_boss" model="ai.analyst.dimension.synonym">
-            <field name="dimension_id" ref="ai_dimension_brand"/>
-            <field name="synonym">boss</field>
-            <field name="canonical_value">Boss</field>
+        <record id="ai_syn_age_adult" model="ai.analyst.dimension.synonym">
+            <field name="dimension_id" ref="ai_dimension_age_group"/>
+            <field name="synonym">adult</field>
+            <field name="canonical_value">Adult</field>
             <field name="match_type">contains</field>
             <field name="priority">3</field>
         </record>
-        <record id="ai_syn_brand_ralph" model="ai.analyst.dimension.synonym">
-            <field name="dimension_id" ref="ai_dimension_brand"/>
-            <field name="synonym">ralph</field>
-            <field name="canonical_value">Ralph Lauren</field>
-            <field name="match_type">contains</field>
-            <field name="priority">4</field>
-        </record>
-        <record id="ai_syn_brand_tommy" model="ai.analyst.dimension.synonym">
-            <field name="dimension_id" ref="ai_dimension_brand"/>
-            <field name="synonym">tommy</field>
-            <field name="canonical_value">Tommy Hilfiger</field>
-            <field name="match_type">contains</field>
-            <field name="priority">5</field>
-        </record>
-        <record id="ai_syn_brand_calvin" model="ai.analyst.dimension.synonym">
-            <field name="dimension_id" ref="ai_dimension_brand"/>
-            <field name="synonym">calvin</field>
-            <field name="canonical_value">Calvin Klein</field>
-            <field name="match_type">contains</field>
-            <field name="priority">6</field>
-        </record>
-        <record id="ai_syn_brand_burberry" model="ai.analyst.dimension.synonym">
-            <field name="dimension_id" ref="ai_dimension_brand"/>
-            <field name="synonym">burberry</field>
-            <field name="canonical_value">Burberry</field>
-            <field name="match_type">contains</field>
-            <field name="priority">7</field>
-        </record>
 
-        <!-- Color Synonyms -->
-        <record id="ai_syn_color_black" model="ai.analyst.dimension.synonym">
-            <field name="dimension_id" ref="ai_dimension_color"/>
-            <field name="synonym">black</field>
-            <field name="canonical_value">Black</field>
+        <!-- Category -->
+        <record id="ai_syn_category_sneakers" model="ai.analyst.dimension.synonym">
+            <field name="dimension_id" ref="ai_dimension_category"/>
+            <field name="synonym">sneakers</field>
+            <field name="canonical_value">Shoes</field>
             <field name="match_type">contains</field>
             <field name="priority">1</field>
         </record>
-        <record id="ai_syn_color_white" model="ai.analyst.dimension.synonym">
-            <field name="dimension_id" ref="ai_dimension_color"/>
-            <field name="synonym">white</field>
-            <field name="canonical_value">White</field>
+        <record id="ai_syn_category_shoes" model="ai.analyst.dimension.synonym">
+            <field name="dimension_id" ref="ai_dimension_category"/>
+            <field name="synonym">shoes</field>
+            <field name="canonical_value">Shoes</field>
             <field name="match_type">contains</field>
             <field name="priority">2</field>
+        </record>
+        <record id="ai_syn_category_shirts" model="ai.analyst.dimension.synonym">
+            <field name="dimension_id" ref="ai_dimension_category"/>
+            <field name="synonym">shirts</field>
+            <field name="canonical_value">Shirts</field>
+            <field name="match_type">contains</field>
+            <field name="priority">3</field>
+        </record>
+        <record id="ai_syn_category_tops" model="ai.analyst.dimension.synonym">
+            <field name="dimension_id" ref="ai_dimension_category"/>
+            <field name="synonym">tops</field>
+            <field name="canonical_value">Shirts</field>
+            <field name="match_type">contains</field>
+            <field name="priority">4</field>
+        </record>
+
+        <!-- Color -->
+        <record id="ai_syn_color_red" model="ai.analyst.dimension.synonym">
+            <field name="dimension_id" ref="ai_dimension_color"/>
+            <field name="synonym">red</field>
+            <field name="canonical_value">Red</field>
+            <field name="match_type">contains</field>
+            <field name="priority">1</field>
+        </record>
+        <record id="ai_syn_color_crimson" model="ai.analyst.dimension.synonym">
+            <field name="dimension_id" ref="ai_dimension_color"/>
+            <field name="synonym">crimson</field>
+            <field name="canonical_value">Red</field>
+            <field name="match_type">contains</field>
+            <field name="priority">2</field>
+        </record>
+        <record id="ai_syn_color_maroon" model="ai.analyst.dimension.synonym">
+            <field name="dimension_id" ref="ai_dimension_color"/>
+            <field name="synonym">maroon</field>
+            <field name="canonical_value">Red</field>
+            <field name="match_type">contains</field>
+            <field name="priority">3</field>
         </record>
         <record id="ai_syn_color_blue" model="ai.analyst.dimension.synonym">
             <field name="dimension_id" ref="ai_dimension_color"/>
             <field name="synonym">blue</field>
             <field name="canonical_value">Blue</field>
             <field name="match_type">contains</field>
-            <field name="priority">3</field>
-        </record>
-        <record id="ai_syn_color_red" model="ai.analyst.dimension.synonym">
-            <field name="dimension_id" ref="ai_dimension_color"/>
-            <field name="synonym">red</field>
-            <field name="canonical_value">Red</field>
-            <field name="match_type">contains</field>
             <field name="priority">4</field>
-        </record>
-        <record id="ai_syn_color_pink" model="ai.analyst.dimension.synonym">
-            <field name="dimension_id" ref="ai_dimension_color"/>
-            <field name="synonym">pink</field>
-            <field name="canonical_value">Pink</field>
-            <field name="match_type">contains</field>
-            <field name="priority">5</field>
-        </record>
-        <record id="ai_syn_color_green" model="ai.analyst.dimension.synonym">
-            <field name="dimension_id" ref="ai_dimension_color"/>
-            <field name="synonym">green</field>
-            <field name="canonical_value">Green</field>
-            <field name="match_type">contains</field>
-            <field name="priority">6</field>
-        </record>
-        <record id="ai_syn_color_yellow" model="ai.analyst.dimension.synonym">
-            <field name="dimension_id" ref="ai_dimension_color"/>
-            <field name="synonym">yellow</field>
-            <field name="canonical_value">Yellow</field>
-            <field name="match_type">contains</field>
-            <field name="priority">7</field>
-        </record>
-        <record id="ai_syn_color_grey" model="ai.analyst.dimension.synonym">
-            <field name="dimension_id" ref="ai_dimension_color"/>
-            <field name="synonym">grey</field>
-            <field name="canonical_value">Grey</field>
-            <field name="match_type">contains</field>
-            <field name="priority">8</field>
         </record>
         <record id="ai_syn_color_navy" model="ai.analyst.dimension.synonym">
             <field name="dimension_id" ref="ai_dimension_color"/>
             <field name="synonym">navy</field>
-            <field name="canonical_value">Navy</field>
+            <field name="canonical_value">Blue</field>
             <field name="match_type">contains</field>
-            <field name="priority">9</field>
+            <field name="priority">5</field>
         </record>
-        <record id="ai_syn_color_beige" model="ai.analyst.dimension.synonym">
+        <record id="ai_syn_color_royal" model="ai.analyst.dimension.synonym">
             <field name="dimension_id" ref="ai_dimension_color"/>
-            <field name="synonym">beige</field>
-            <field name="canonical_value">Beige</field>
+            <field name="synonym">royal</field>
+            <field name="canonical_value">Blue</field>
             <field name="match_type">contains</field>
-            <field name="priority">10</field>
+            <field name="priority">6</field>
         </record>
 
     </data>

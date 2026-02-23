@@ -49,14 +49,13 @@ Security:
         'security/ai_analyst_rules.xml',
         'security/workspace_rules.xml',
         'security/dimension_rules.xml',
-        'security/field_kb_rules.xml',
         # Data
         'data/ai_analyst_config_data.xml',
-        'data/provider_config_data.xml',
         'data/ai_analyst_cron.xml',
         'data/workspace_data.xml',
         'data/dimension_data.xml',
         'data/season_data.xml',
+        'data/computed_metric_data.xml',
         # Views (actions first, menus last)
         'views/ai_analyst_conversation_views.xml',
         'views/ai_analyst_provider_config_views.xml',
@@ -64,11 +63,9 @@ Security:
         'views/ai_analyst_saved_report_views.xml',
         'views/dashboard_views.xml',
         'views/workspace_views.xml',
-        'views/dimension_views.xml',
-        'views/field_kb_views.xml',
         'views/ai_analyst_menus.xml',
+        'views/dimension_views.xml',
     ],
-    'post_init_hook': 'post_init_hook',
     'assets': {
         'web.assets_backend': [
             'ai_analyst/static/src/scss/ai_analyst.scss',

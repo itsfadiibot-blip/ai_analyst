@@ -111,11 +111,4 @@
         groups="ai_analyst.group_ai_manager"
     />
 
-    <menuitem id="menu_ai_analyst_config" name="Configuration" parent="menu_ai_analyst_root" sequence="95" groups="ai_analyst.group_ai_admin"/>
-    <menuitem id="menu_ai_analyst_field_kb_root" name="Field Knowledge Base" parent="menu_ai_analyst_config" sequence="10" groups="ai_analyst.group_ai_admin"/>
-    <menuitem id="menu_ai_analyst_field_kb_models" name="Models" parent="menu_ai_analyst_field_kb_root" action="action_field_kb_models" sequence="10" groups="ai_analyst.group_ai_admin"/>
-    <menuitem id="menu_ai_analyst_field_kb_fields" name="Fields" parent="menu_ai_analyst_field_kb_root" action="action_field_kb_fields" sequence="20" groups="ai_analyst.group_ai_admin"/>
-    <menuitem id="menu_ai_analyst_field_kb_synonyms" name="Synonyms" parent="menu_ai_analyst_field_kb_root" action="action_field_kb_synonyms" sequence="30" groups="ai_analyst.group_ai_admin"/>
-    <menuitem id="menu_ai_analyst_field_kb_unmapped" name="Unmapped Terms" parent="menu_ai_analyst_field_kb_root" action="action_field_kb_unmapped" sequence="40" groups="ai_analyst.group_ai_admin"/>
-
 </odoo>

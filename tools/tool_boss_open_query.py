@@ -13,7 +13,6 @@ class BossOpenQueryTool(BaseTool):
     parameters_schema = {
         'type': 'object',
         'properties': {
-            'user_query': {'type': 'string'},
             'query_plan': {'type': 'object'},
             'mode': {'type': 'string', 'enum': ['auto', 'inline', 'paginated', 'async_export'], 'default': 'auto'},
             'force_export': {'type': 'boolean', 'default': False},
@@ -34,10 +33,8 @@ class BossOpenQueryTool(BaseTool):
             raise AccessError('boss_open_query requires group_boss_open_query')
 
         svc = env['ai.analyst.boss.open.query.service'].with_user(user)
-        user_query = (params.get('user_query') or '').strip()
         plan = svc.validate_and_normalize_plan(params['query_plan'])
         cost = svc.estimate_cost(plan)
-        field_mapping = svc.build_field_mapping_meta(user_query, plan)
 
         requested_mode = params.get('mode') or 'auto'
         mode = cost['recommended_mode'] if requested_mode == 'auto' else requested_mode
@@ -70,14 +67,13 @@ class BossOpenQueryTool(BaseTool):
                 table={'columns': [], 'rows': [], 'total_row': None},
                 chart={},
                 actions=actions,
-                meta={'mode': mode, 'cost_estimate': cost, 'export_job_id': job.id, 'export_job_token': job.job_token, 'field_mapping': field_mapping, 'query_plan_validated': True},
+                meta={'mode': mode, 'cost_estimate': cost, 'export_job_id': job.id, 'export_job_token': job.job_token},
             )
 
         rows = svc.execute_page(plan)
-        total_count = svc.count_total(plan)
         limit = plan['pagination']['limit']
         offset = plan['pagination']['offset']
-        has_more = (offset + len(rows)) < total_count
+        has_more = len(rows) >= limit
         next_offset = offset + limit if has_more else offset
         next_cursor = svc.encode_cursor(next_offset) if has_more else False
 
@@ -135,15 +131,13 @@ class BossOpenQueryTool(BaseTool):
                 'mode': mode,
                 'cost_estimate': cost,
                 'pagination': {
-                    'total': total_count,
-                    'offset': offset,
-                    'limit': limit,
+                    'mode': plan['pagination']['mode'],
+                    'current_offset': offset,
+                    'page_size': limit,
                     'has_more': has_more,
                     'next_offset': next_offset if has_more else False,
                     'next_cursor': next_cursor,
                 },
-                'field_mapping': field_mapping,
-                'query_plan_validated': True,
             },
         )
 

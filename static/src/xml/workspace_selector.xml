@@ -42,20 +42,6 @@
                             </a>
                         </li>
                     </t>
-
-                    <t t-if="props.toolNames and props.toolNames.length">
-                        <li><hr class="dropdown-divider"/></li>
-                        <li>
-                            <h6 class="dropdown-header">Tools in this view</h6>
-                        </li>
-                        <t t-foreach="props.toolNames" t-as="toolName" t-key="toolName">
-                            <li>
-                                <span class="dropdown-item-text" style="font-size: 12px;">
-                                    <t t-esc="toolName"/>
-                                </span>
-                            </li>
-                        </t>
-                    </t>
                 </ul>
             </div>
         </div>

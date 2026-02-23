@@ -68,15 +68,6 @@ class AiAnalystProviderConfig(models.Model):
         help='Number of retry attempts on transient errors',
     )
 
-    # --- Routing ---
-    cost_tier = fields.Selection([
-        ('cheap', 'Cheap'),
-        ('standard', 'Standard'),
-        ('premium', 'Premium'),
-    ], string='Cost Tier', default='standard', required=True)
-    priority = fields.Integer(string='Priority', default=10)
-    is_escalation_target = fields.Boolean(string='Escalation Target', default=False)
-
     # --- Status ---
     is_active = fields.Boolean(
         string='Active',
