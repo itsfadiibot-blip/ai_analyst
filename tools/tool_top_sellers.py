@@ -2,7 +2,7 @@
 """Tool: get_top_sellers - Top products/salespersons/categories by revenue, quantity, or margin.
 
 FIXED: Now uses salesman_id field (which exists and is populated) instead of order_id.user_id.
-Margin is computed from cost_aed since no margin field exists on sale_order_line.
+Margin is computed from standard_price since no margin field exists on sale_order_line.
 """
 import logging
 
@@ -93,7 +93,7 @@ class TopSellersTool(BaseTool):
             agg_fields = ['product_uom_qty:sum', 'price_subtotal:sum']
             sort_field = 'product_uom_qty'
         elif metric == 'margin':
-            # FIXED: For margin, we need to compute from cost_aed
+            # FIXED: For margin, we need to compute from standard_price
             # We'll get revenue and compute margin from product costs
             agg_fields = ['price_subtotal:sum', 'product_uom_qty:sum']
             sort_field = 'price_subtotal'  # Fallback, will re-sort after computing
@@ -124,7 +124,7 @@ class TopSellersTool(BaseTool):
             revenue = round(row.get('price_subtotal', 0) or 0, 2)
             qty = round(row.get('product_uom_qty', 0) or 0, 2)
 
-            # FIXED: Compute margin from product cost_aed
+            # FIXED: Compute margin from product standard_price
             margin = self._compute_margin(env, base_domain, entity_id, by, groupby_field)
             margin_pct = round((margin / revenue * 100), 1) if revenue > 0 else 0
 
@@ -157,11 +157,11 @@ class TopSellersTool(BaseTool):
 
     def _compute_margin(self, env, base_domain, entity_id, by, groupby_field):
         """Compute margin by fetching lines and calculating revenue - cost.
-        
-        FIXED: Uses cost_aed from product_product since no margin field exists.
+
+        FIXED: Uses standard_price from product_product since no margin field exists.
         """
         SOLine = env['sale.order.line']
-        
+
         domain = list(base_domain)
         if entity_id:
             if by == 'product':
@@ -171,31 +171,31 @@ class TopSellersTool(BaseTool):
             elif by == 'salesperson':
                 # FIXED: Use salesman_id
                 domain.append(('salesman_id', '=', entity_id))
-        
+
         lines = SOLine.search_read(
             domain,
             fields=['price_subtotal', 'product_uom_qty', 'product_id'],
             limit=5000,
         )
-        
+
         total_revenue = 0
         total_cost = 0
-        
+
         product_ids = list(set([l['product_id'][0] for l in lines if l.get('product_id')]))
-        
+
         if product_ids:
             Product = env['product.product']
             products = Product.browse(product_ids)
-            cost_map = {p.id: (p.cost_aed or 0) for p in products}
-            
+            cost_map = {p.id: (p.standard_price or 0) for p in products}
+
             for line in lines:
                 revenue = line.get('price_subtotal', 0) or 0
                 qty = line.get('product_uom_qty', 0) or 0
                 product_id = line.get('product_id')
-                
+
                 total_revenue += revenue
                 if product_id:
                     cost = cost_map.get(product_id[0], 0)
                     total_cost += qty * cost
-        
+
         return round(total_revenue - total_cost, 2)

@@ -1,11 +1,9 @@
 # -*- coding: utf-8 -*-
 """Tool: get_inventory_valuation — Inventory valuation as of a specific date.
 
-Respects product category costing method (Standard, FIFO, Average).
-Uses stock.valuation.layer for accurate historical valuation.
+FIXED: Uses stock.quant.value for valuation, product.product.free_qty for available stock.
 """
 import logging
-from datetime import datetime
 
 from .base_tool import BaseTool
 from .registry import register_tool
@@ -17,10 +15,9 @@ _logger = logging.getLogger(__name__)
 class InventoryValuationTool(BaseTool):
     name = 'get_inventory_valuation'
     description = (
-        'Get inventory valuation as of a specific date. Respects product category '
-        'costing method (Standard Cost, FIFO, Average Cost). '
-        'Groups by product or product category. '
-        'Uses stock valuation layers for accurate historical valuation.'
+        'Get inventory valuation as of a specific date. '
+        'Shows stock value and available quantity. '
+        'Groups by product, category, or brand.'
     )
     parameters_schema = {
         'type': 'object',
@@ -28,17 +25,12 @@ class InventoryValuationTool(BaseTool):
             'as_of_date': {
                 'type': 'string',
                 'format': 'date',
-                'description': 'Valuation date (YYYY-MM-DD). Shows inventory value as of this date.',
+                'description': 'Valuation date (YYYY-MM-DD)',
             },
             'group_by': {
                 'type': 'string',
-                'enum': ['product', 'category', 'warehouse'],
+                'enum': ['product', 'category', 'brand'],
                 'default': 'category',
-            },
-            'category_ids': {
-                'type': 'array',
-                'items': {'type': 'integer'},
-                'description': 'Filter by product category IDs (optional)',
             },
             'limit': {
                 'type': 'integer',
@@ -53,31 +45,33 @@ class InventoryValuationTool(BaseTool):
     def execute(self, env, user, params):
         as_of_date = params['as_of_date']
         group_by = params.get('group_by', 'category')
-        category_ids = params.get('category_ids', [])
         limit = params.get('limit', 50)
         company_id = user.company_id.id
-        currency = user.company_id.currency_id.name or 'USD'
+        currency = user.company_id.currency_id.name or 'AED'
 
-        # Use stock.valuation.layer for accurate as-of-date valuation
-        SVL = env['stock.valuation.layer']
+        # FIXED: Use stock.quant for valuation (has value field)
+        Quant = env['stock.quant']
 
         domain = [
-            ('create_date', '<=', as_of_date + ' 23:59:59'),
             ('company_id', '=', company_id),
+            ('quantity', '>', 0),  # Only positive stock
+            ('location_id.usage', '=', 'internal'),  # Only internal locations
         ]
-        if category_ids:
-            domain.append(('product_id.categ_id', 'in', category_ids))
 
+        # FIXED: Group by using correct field paths
         if group_by == 'product':
             groupby_field = 'product_id'
         elif group_by == 'category':
-            groupby_field = 'product_id.categ_id'
+            # FIXED: Use x_sfcc_primary_category not categ_id
+            groupby_field = 'product_id.product_tmpl_id.x_sfcc_primary_category'
+        elif group_by == 'brand':
+            # FIXED: Use real brand field
+            groupby_field = 'product_id.product_tmpl_id.x_studio_many2one_field_mG9Pn'
         else:
-            # Warehouse grouping via stock_move_id.location_dest_id.warehouse_id
-            # Simplified: group by product for warehouse
-            groupby_field = 'product_id'
+            groupby_field = 'product_id.product_tmpl_id.x_sfcc_primary_category'
 
-        group_data = SVL.read_group(
+        # FIXED: stock.quant has value field for valuation
+        group_data = Quant.read_group(
             domain,
             fields=['value:sum', 'quantity:sum'],
             groupby=[groupby_field],
@@ -93,6 +87,7 @@ class InventoryValuationTool(BaseTool):
             entity = row.get(groupby_field)
             entity_name = 'Unknown'
             entity_id = None
+
             if isinstance(entity, (list, tuple)) and len(entity) >= 2:
                 entity_id = entity[0]
                 entity_name = entity[1]

@@ -14,5 +14,6 @@ from . import tool_ap_aging
 from . import tool_export_csv
 from . import tool_sales_by_dimension
 from . import tool_season_performance
+from . import tool_sell_through  # NEW: Sell-through analysis tool
 from . import tool_boss_open_query
 from . import tool_boss_sql_readonly

@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-"""Tool: get_margin_summary - Profit margin analysis by product, category, time, or salesperson.
+"""Tool: get_margin_summary - Profit margin analysis.
 
-FIXED: Now computes margin from product_product.cost_aed since sale_order_line.margin doesn't exist.
-Margin = price_subtotal - (product_uom_qty * product_id.cost_aed)
+FIXED: Margin is calculated as revenue - cost, NOT from a stored field.
+Cost comes from product.product.standard_price (NOT purchase_price on sale.order.line).
 """
 import logging
 
@@ -18,7 +18,7 @@ class MarginSummaryTool(BaseTool):
     description = (
         'Get profit margin analysis: revenue, cost, gross margin, and margin percentage. '
         'Can group by product, product category, month, or salesperson. '
-        'Margin is computed as revenue minus cost (using product cost_aed field).'
+        'Margin = revenue - (quantity × cost_price).'
     )
     parameters_schema = {
         'type': 'object',
@@ -33,7 +33,7 @@ class MarginSummaryTool(BaseTool):
             },
             'group_by': {
                 'type': 'string',
-                'enum': ['product', 'category', 'month', 'salesperson'],
+                'enum': ['product', 'category', 'month', 'salesperson', 'brand'],
                 'default': 'category',
             },
             'limit': {
@@ -61,20 +61,20 @@ class MarginSummaryTool(BaseTool):
             ('order_id.date_order', '>=', date_from),
             ('order_id.date_order', '<=', date_to + ' 23:59:59'),
             ('order_id.company_id', '=', company_id),
-            ('display_type', '=', False),  # Skip section/note lines
+            ('display_type', '=', False),
         ]
 
-        # Determine ORM groupby field
-        # FIXED: Use salesman_id (real field) instead of order_id.user_id
+        # FIXED: Determine groupby field using correct field paths
         groupby_map = {
             'product': 'product_id',
-            'category': 'product_id.categ_id',
+            'category': 'product_id.product_tmpl_id.x_sfcc_primary_category',  # FIXED: not categ_id
             'month': 'order_id.date_order:month',
-            'salesperson': 'salesman_id',  # FIXED: was order_id.user_id, now salesman_id
+            'salesperson': 'salesman_id',
+            'brand': 'product_id.product_tmpl_id.x_studio_many2one_field_mG9Pn',  # FIXED: real brand field
         }
-        orm_groupby = groupby_map.get(group_by, 'product_id.categ_id')
+        orm_groupby = groupby_map.get(group_by, 'product_id.product_tmpl_id.x_sfcc_primary_category')
 
-        # Read group to get revenue and quantity
+        # Get revenue aggregates
         agg_fields = ['price_subtotal:sum', 'product_uom_qty:sum']
 
         group_data = SOLine.read_group(
@@ -93,6 +93,7 @@ class MarginSummaryTool(BaseTool):
             entity = row.get(orm_groupby)
             entity_name = 'Unknown'
             entity_id = None
+
             if isinstance(entity, (list, tuple)) and len(entity) >= 2:
                 entity_name = entity[1]
                 entity_id = entity[0]
@@ -104,8 +105,8 @@ class MarginSummaryTool(BaseTool):
             revenue = round(row.get('price_subtotal', 0) or 0, 2)
             qty = round(row.get('product_uom_qty', 0) or 0, 2)
 
-            # FIXED: Compute cost and margin from product_product.cost_aed
-            # Since we can't aggregate cost in read_group, we'll fetch costs separately
+            # FIXED: Compute cost and margin from product.product.standard_price
+            # NO margin or purchase_price fields exist on sale.order.line
             cost = self._compute_total_cost(env, domain, entity_id, group_by, orm_groupby)
             margin = round(revenue - cost, 2)
             margin_pct = round((margin / revenue * 100), 1) if revenue > 0 else 0
@@ -145,48 +146,49 @@ class MarginSummaryTool(BaseTool):
         return result
 
     def _compute_total_cost(self, env, base_domain, entity_id, group_by, orm_groupby):
-        """Compute total cost for a grouping by summing (qty * cost_aed) for each line.
-        
-        FIXED: Since sale_order_line has no margin field, we compute from product_product.cost_aed
+        """Compute total cost for a grouping by summing (qty × standard_price) for each line.
+
+        FIXED: Uses product.product.standard_price (cost field), NOT purchase_price or margin.
         """
         SOLine = env['sale.order.line']
-        
+
         # Build specific domain for this entity
         domain = list(base_domain)
         if entity_id:
             if group_by == 'product':
                 domain.append(('product_id', '=', entity_id))
             elif group_by == 'category':
-                domain.append(('product_id.categ_id', '=', entity_id))
+                domain.append(('product_id.product_tmpl_id.x_sfcc_primary_category', '=', entity_id))
+            elif group_by == 'brand':
+                domain.append(('product_id.product_tmpl_id.x_studio_many2one_field_mG9Pn', '=', entity_id))
             elif group_by == 'salesperson':
-                # FIXED: Use salesman_id instead of order_id.user_id
                 if entity_id:
                     domain.append(('salesman_id', '=', entity_id))
                 else:
                     domain.append(('salesman_id', '=', False))
-            # For month, we can't filter by ID easily, skip optimization
-        
-        # Fetch lines with product cost
+            # For month, entity_id is string, skip optimization
+
+        # Fetch lines with product reference
         lines = SOLine.search_read(
             domain,
             fields=['product_uom_qty', 'product_id'],
-            limit=10000,  # Reasonable limit for aggregation
+            limit=10000,
         )
-        
+
         total_cost = 0
         product_ids = list(set([l['product_id'][0] for l in lines if l.get('product_id')]))
-        
+
         if product_ids:
-            # Fetch costs in batch
+            # FIXED: Fetch costs from product.product.standard_price in batch
             Product = env['product.product']
             products = Product.browse(product_ids)
-            cost_map = {p.id: (p.cost_aed or 0) for p in products}
-            
+            cost_map = {p.id: (p.standard_price or 0) for p in products}
+
             for line in lines:
                 qty = line.get('product_uom_qty', 0) or 0
                 product_id = line.get('product_id')
                 if product_id:
                     cost = cost_map.get(product_id[0], 0)
                     total_cost += qty * cost
-        
+
         return round(total_cost, 2)
