@@ -52,6 +52,7 @@ Security:
         'security/field_kb_rules.xml',
         # Data
         'data/ai_analyst_config_data.xml',
+        'data/provider_config_data.xml',
         'data/ai_analyst_cron.xml',
         'data/workspace_data.xml',
         'data/dimension_data.xml',

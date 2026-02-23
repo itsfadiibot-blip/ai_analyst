@@ -1,5 +1,9 @@
 # -*- coding: utf-8 -*-
-"""Tool: get_stock_aging — Identify slow-moving and aging stock."""
+"""Tool: get_stock_aging - Identify slow-moving and aging stock.
+
+FIXED: Now computes valuation from quantity * product_id.standard_price 
+instead of using non-existent stock_quant.value field.
+"""
 import logging
 from datetime import datetime, timedelta
 
@@ -52,7 +56,7 @@ class StockAgingTool(BaseTool):
         limit = params.get('limit', 50)
         sort_by = params.get('sort_by', 'days_since_last_sale')
         company_id = user.company_id.id
-        currency = user.company_id.currency_id.name or 'USD'
+        currency = user.company_id.currency_id.name or 'AED'
 
         today = datetime.now().date()
         threshold_date = today - timedelta(days=days_threshold)
@@ -70,15 +74,24 @@ class StockAgingTool(BaseTool):
         # Group by product to get total qty on hand
         quant_data = Quant.read_group(
             quant_domain,
-            fields=['quantity:sum', 'value:sum'],
+            # FIXED: Removed value:sum since column doesn't exist
+            fields=['quantity:sum'],
             groupby=['product_id'],
             orderby='quantity desc',
-            limit=500,  # Get more than needed, will filter
+            limit=500,
         )
 
         # For each product, find the last sale date
         SOLine = env['sale.order.line']
+        SaleOrder = env['sale.order']
         rows = []
+
+        # Pre-fetch products to get standard_price for valuation
+        product_ids = [q['product_id'][0] for q in quant_data if q.get('product_id')]
+        Product = env['product.product']
+        products = Product.browse(product_ids) if product_ids else Product
+        # Create a map of product_id -> standard_price
+        price_map = {p.id: (p.standard_price or 0) for p in products}
 
         for quant_row in quant_data:
             product = quant_row.get('product_id')
@@ -88,44 +101,32 @@ class StockAgingTool(BaseTool):
             product_id = product[0]
             product_name = product[1]
             qty_on_hand = round(quant_row.get('quantity', 0) or 0, 2)
-            valuation = round(quant_row.get('value', 0) or 0, 2)
+            
+            # FIXED: Compute valuation using standard_price (since value field doesn't exist)
+            unit_cost = price_map.get(product_id, 0)
+            valuation = round(unit_cost * qty_on_hand, 2)
 
-            # Find last sale for this product
-            last_sale = SOLine.search_read(
+            # Find last sale date for this product
+            # FIXED: Use sale.order with product_id filter, ordered by date_order
+            last_orders = SaleOrder.search_read(
                 [
-                    ('product_id', '=', product_id),
-                    ('order_id.state', 'in', ['sale', 'done']),
-                    ('order_id.company_id', '=', company_id),
+                    ('order_line.product_id', '=', product_id),
+                    ('state', 'in', ['sale', 'done']),
+                    ('company_id', '=', company_id),
                 ],
-                fields=['order_id.date_order'],
-                order='order_id desc',
+                fields=['date_order'],
+                order='date_order desc',
                 limit=1,
             )
-
-            if last_sale:
-                last_sale_date = last_sale[0].get('order_id', [None, None])
-                # Handle the date from the related field
-                last_orders = env['sale.order'].search_read(
-                    [
-                        ('order_line.product_id', '=', product_id),
-                        ('state', 'in', ['sale', 'done']),
-                        ('company_id', '=', company_id),
-                    ],
-                    fields=['date_order'],
-                    order='date_order desc',
-                    limit=1,
-                )
-                if last_orders and last_orders[0].get('date_order'):
-                    last_date = last_orders[0]['date_order'].date() if hasattr(
-                        last_orders[0]['date_order'], 'date'
-                    ) else datetime.strptime(
-                        str(last_orders[0]['date_order'])[:10], '%Y-%m-%d'
-                    ).date()
-                    days_since = (today - last_date).days
-                    last_date_str = last_date.isoformat()
-                else:
-                    days_since = 9999
-                    last_date_str = None
+            
+            if last_orders and last_orders[0].get('date_order'):
+                last_date = last_orders[0]['date_order'].date() if hasattr(
+                    last_orders[0]['date_order'], 'date'
+                ) else datetime.strptime(
+                    str(last_orders[0]['date_order'])[:10], '%Y-%m-%d'
+                ).date()
+                days_since = (today - last_date).days
+                last_date_str = last_date.isoformat()
             else:
                 days_since = 9999
                 last_date_str = None

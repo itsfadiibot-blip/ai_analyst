@@ -5,6 +5,7 @@ from . import ai_analyst_message
 from . import ai_analyst_tool_call_log
 from . import ai_analyst_audit_log
 from . import ai_analyst_provider_config
+from . import ai_analyst_model_router
 from . import ai_analyst_saved_report
 from . import dashboard
 from . import ai_analyst_gateway

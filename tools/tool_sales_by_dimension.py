@@ -57,6 +57,7 @@ class SalesByDimensionTool(BaseTool):
             ('order_id.company_id', '=', user.company_id.id),
             ('order_id.date_order', '>=', f'{date_from} 00:00:00'),
             ('order_id.date_order', '<=', f'{date_to} 23:59:59'),
+            ('display_type', '=', False),  # FIXED: Skip section/note lines
         ]
 
         resolved_filters = {}

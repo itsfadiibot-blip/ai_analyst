@@ -13,6 +13,7 @@ from datetime import date, datetime
 
 from odoo import models, fields, api, _
 from odoo.exceptions import UserError, ValidationError, AccessError
+from . import ai_analyst_model_router  # noqa: F401
 
 _logger = logging.getLogger(__name__)
 
@@ -126,20 +127,24 @@ class AiAnalystGateway(models.AbstractModel):
         )
 
         try:
-            # --- Get provider ---
-            provider_config = self.env['ai.analyst.provider.config'].get_default_provider(
-                company_id=company.id
+            # --- Resolve workspace context (revalidated on each request) ---
+            workspace = conversation.workspace_id
+            workspace_ctx = self._resolve_workspace_context(workspace, user)
+
+            # --- Get provider via model router ---
+            router = self.env['ai.analyst.model.router']
+            history_for_routing = conversation.get_history_for_ai(
+                max_messages=int(self.env['ir.config_parameter'].sudo().get_param(
+                    'ai_analyst.max_history_messages', DEFAULT_MAX_HISTORY_MESSAGES
+                ))
             )
+            provider_config = router.select_provider(user, workspace, user_message, history_for_routing)
             if not provider_config:
                 return self._error_response(
                     'No AI provider configured. Please contact your administrator.'
                 )
 
             provider = self._get_provider_instance(provider_config)
-
-            # --- Resolve workspace context (revalidated on each request) ---
-            workspace = conversation.workspace_id
-            workspace_ctx = self._resolve_workspace_context(workspace, user)
 
             # --- Build messages for the AI ---
             system_prompt = self._build_system_prompt(user, company, workspace_ctx, user_message=user_message)
@@ -175,6 +180,27 @@ class AiAnalystGateway(models.AbstractModel):
                 max_tokens=provider_config.max_tokens,
                 temperature=provider_config.temperature,
             )
+
+            # Escalate model immediately when router detects low-quality first response
+            if router.should_escalate(ai_response, [], provider_config.cost_tier):
+                escalated_config = router._get_escalation_provider(provider_config)
+                if escalated_config and escalated_config.id != provider_config.id:
+                    self._log_audit(
+                        user, company, 'model_escalation',
+                        summary=f'Escalated from {provider_config.model_name} to {escalated_config.model_name}',
+                        conversation_id=conversation.id,
+                        provider=escalated_config.provider_type,
+                        model_name=escalated_config.model_name,
+                    )
+                    provider_config = escalated_config
+                    provider = self._get_provider_instance(provider_config)
+                    ai_response = provider.chat(
+                        system=system_prompt,
+                        messages=messages,
+                        tools=tool_schemas,
+                        max_tokens=provider_config.max_tokens,
+                        temperature=provider_config.temperature,
+                    )
 
             while ai_response.tool_calls and tool_call_count < max_tool_calls:
                 tool_results = []
