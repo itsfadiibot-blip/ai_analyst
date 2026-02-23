@@ -2,7 +2,7 @@
 <templates xml:space="preserve">
 
     <t t-name="ai_analyst.AiAnalystAction">
-        <div t-att-class="'ai-analyst-container aiAnalystApp d-flex h-100 ' + (state.consoleMode ? 'aiConsoleMode' : '')">
+        <div class="ai-analyst-container aiAnalystApp d-flex h-100">
 
             <!-- ============================================================
                  SIDEBAR — Conversation list
@@ -18,18 +18,25 @@
                 </div>
                 <div class="ai-analyst-conv-list overflow-auto" style="max-height: calc(100vh - 120px);">
                     <t t-foreach="state.conversations" t-as="conv" t-key="conv.id">
-                        <div t-att-class="'ai-analyst-conv-item p-2 px-3 border-bottom cursor-pointer '
+                        <div t-att-class="'ai-analyst-conv-item p-2 px-3 border-bottom cursor-pointer d-flex justify-content-between align-items-start '
                              + (state.currentConversationId === conv.id ? 'bg-primary-subtle' : '')"
                              t-on-click="() => this.selectConversation(conv.id)">
-                            <div class="fw-semibold text-truncate" style="font-size: 13px;">
-                                <t t-esc="conv.name || 'Untitled'"/>
+                            <div class="flex-grow-1">
+                                <div class="fw-semibold text-truncate" style="font-size: 13px;">
+                                    <t t-esc="conv.name || 'Untitled'"/>
+                                </div>
+                                <div class="text-muted" style="font-size: 11px;">
+                                    <t t-esc="formatDate(conv.write_date)"/>
+                                    <span class="ms-2 badge bg-secondary-subtle text-secondary">
+                                        <t t-esc="conv.message_count"/> msgs
+                                    </span>
+                                </div>
                             </div>
-                            <div class="text-muted" style="font-size: 11px;">
-                                <t t-esc="formatDate(conv.write_date)"/>
-                                <span class="ms-2 badge bg-secondary-subtle text-secondary">
-                                    <t t-esc="conv.message_count"/> msgs
-                                </span>
-                            </div>
+                            <button class="btn btn-sm btn-outline-danger py-0 px-2 ms-2"
+                                    title="Delete conversation"
+                                    t-on-click.stop="() => this.archiveConversation(conv.id)">
+                                &#215;
+                            </button>
                         </div>
                     </t>
                     <div t-if="!state.conversations.length" class="p-3 text-muted text-center">
@@ -62,10 +69,6 @@
                             New Conversation
                         </t>
                     </span>
-                    <label class="form-check form-switch m-0 d-flex align-items-center gap-1">
-                        <input class="form-check-input" type="checkbox" t-att-checked="state.consoleMode" t-on-change="toggleConsoleMode"/>
-                        <span class="small">Console Mode</span>
-                    </label>
                 </div>
 
                 <!-- Messages area -->

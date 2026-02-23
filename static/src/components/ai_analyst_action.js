@@ -32,7 +32,6 @@ class AiAnalystAction extends Component {
             inputText: "",
             isLoading: false,
             sidebarOpen: true,
-            consoleMode: false,
             // Workspace state
             workspaces: [],
             selectedWorkspaceId: null,
@@ -46,7 +45,6 @@ class AiAnalystAction extends Component {
         this._chartInstances = {};
 
         onMounted(() => {
-            this.loadConsoleMode();
             this.loadConversations();
             this.loadWorkspaces();
             if (this.inputRef.el) {
@@ -67,26 +65,6 @@ class AiAnalystAction extends Component {
     // ------------------------------------------------------------------
     // Data loading
     // ------------------------------------------------------------------
-
-    async loadConsoleMode() {
-        try {
-            const result = await this.rpc("/ai_analyst/ui/get_console_mode", {});
-            this.state.consoleMode = !!result.enabled;
-        } catch (e) {
-            console.error("Failed to load console mode:", e);
-        }
-    }
-
-    async toggleConsoleMode(ev) {
-        const enabled = !!ev.target.checked;
-        this.state.consoleMode = enabled;
-        try {
-            await this.rpc("/ai_analyst/ui/set_console_mode", { enabled });
-        } catch (e) {
-            this.state.consoleMode = !enabled;
-            console.error("Failed to set console mode:", e);
-        }
-    }
 
     async loadConversations() {
         try {

@@ -53,6 +53,9 @@ class AiAnalystFieldResolver(models.AbstractModel):
         model_names = context_models or registry.DEFAULT_WHITELIST
         for model_name in model_names:
             for f in registry.get_schema(model_name):
+                # Skip non-stored fields - they can't be used in SQL aggregates
+                if not f.get('stored', True):
+                    continue
                 label = (f.get('string') or '').lower()
                 name = (f.get('name') or '').lower()
                 score = 0.0

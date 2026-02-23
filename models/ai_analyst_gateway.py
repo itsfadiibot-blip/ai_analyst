@@ -331,12 +331,21 @@ class AiAnalystGateway(models.AbstractModel):
         answer = 'Universal query executed successfully.' if not explain_mode else 'Plan generated and validated. Execution included.'
         table_rows = []
         if plan.get('steps'):
-            first = payload['steps'].get(plan['steps'][0]['id'])
-            table_rows = first if isinstance(first, list) else [first]
+            first = (payload.get('steps') or {}).get(plan['steps'][0]['id'])
+            if isinstance(first, list):
+                table_rows = first
+            elif isinstance(first, dict):
+                table_rows = [first]
+            elif first is not None:
+                table_rows = [{'value': first}]
+
+        table_columns = self._build_table_columns(table_rows)
+        if not explain_mode:
+            answer = self._build_universal_answer(table_rows, default=answer)
 
         structured = {
             'answer': answer,
-            'table': {'columns': [], 'rows': table_rows, 'total_row': None},
+            'table': {'columns': table_columns, 'rows': table_rows, 'total_row': None},
             'meta': {
                 'route': 'universal_query',
                 'query_plan': plan,
@@ -355,6 +364,47 @@ class AiAnalystGateway(models.AbstractModel):
             'processing_time_ms': elapsed_ms,
         })
         return structured
+
+    def _build_table_columns(self, rows):
+        """Build table column metadata from row dictionaries."""
+        if not rows or not isinstance(rows, list):
+            return []
+        first = rows[0]
+        if not isinstance(first, dict):
+            return []
+        columns = []
+        for key, value in first.items():
+            columns.append({
+                'key': key,
+                'label': self._labelize_column_key(key),
+                'type': self._infer_column_type(value),
+                'align': 'right' if isinstance(value, (int, float)) else 'left',
+            })
+        return columns
+
+    def _build_universal_answer(self, rows, default='Universal query executed successfully.'):
+        """Produce a user-facing answer that includes key output values."""
+        if not rows:
+            return 'No results were found for this query.'
+        if len(rows) == 1 and isinstance(rows[0], dict):
+            row = rows[0]
+            if 'count' in row and isinstance(row.get('count'), (int, float)):
+                return 'Found %s records.' % int(row['count'])
+            if '__count' in row and isinstance(row.get('__count'), (int, float)):
+                return 'Found %s records.' % int(row['__count'])
+        return '%s Returned %s row(s).' % (default.rstrip('.'), len(rows))
+
+    def _labelize_column_key(self, key):
+        """Convert snake_case/system keys into readable labels."""
+        text = (key or '').replace('__', ' ').replace('_', ' ').strip()
+        return text.title() if text else 'Value'
+
+    def _infer_column_type(self, value):
+        if isinstance(value, bool):
+            return 'string'
+        if isinstance(value, (int, float)):
+            return 'number'
+        return 'string'
 
     def _build_system_prompt(self, user, company, workspace_ctx=None):
         """Build the system prompt with context variables and optional workspace context."""

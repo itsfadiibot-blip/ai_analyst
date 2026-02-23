@@ -1,6 +1,6 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
-AI Analyst Controllers — HTTP endpoints for the chat interface.
+AI Analyst Controllers â€” HTTP endpoints for the chat interface.
 ================================================================
 """
 import base64
@@ -316,16 +316,6 @@ class AiAnalystController(http.Controller):
         ]
         return request.make_response(content, headers=headers)
 
-    @http.route('/ai_analyst/ui/get_console_mode', type='json', auth='user', methods=['POST'])
-    def get_console_mode(self, **kwargs):
-        user = request.env.user
-        return {'enabled': bool(user.ai_console_mode)}
-
-    @http.route('/ai_analyst/ui/set_console_mode', type='json', auth='user', methods=['POST'])
-    def set_console_mode(self, enabled=False, **kwargs):
-        user = request.env.user
-        user.with_user(user).write({'ai_console_mode': bool(enabled)})
-        return {'ok': True, 'enabled': bool(user.ai_console_mode)}
 
     # ------------------------------------------------------------------
     # Workspaces
