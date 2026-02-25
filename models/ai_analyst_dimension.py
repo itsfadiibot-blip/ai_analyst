@@ -11,6 +11,19 @@ class AiAnalystDimension(models.Model):
     code = fields.Char(required=True, index=True)
     model_name = fields.Char(required=True, default='sale.order.line')
     field_name = fields.Char(required=True)
+    sale_line_path = fields.Char(help='Path from sale.order.line to this dimension field.')
+    stock_quant_path = fields.Char(help='Path from stock.quant to this dimension field.')
+    purchase_line_path = fields.Char(help='Path from purchase.order.line to this dimension field.')
+    field_type = fields.Selection([
+        ('char', 'Char'), ('integer', 'Integer'), ('float', 'Float'), ('boolean', 'Boolean'),
+        ('binary', 'Binary'), ('many2one', 'Many2one'), ('selection', 'Selection'),
+        ('date', 'Date'), ('datetime', 'Datetime'),
+    ], default='char')
+    comodel_name = fields.Char()
+    queryable_as = fields.Selection([
+        ('direct', 'Direct'), ('boolean_presence', 'Boolean Presence'),
+        ('ilike_search', 'ILike Search'), ('id_lookup', 'ID Lookup'),
+    ], default='direct', required=True)
     is_active = fields.Boolean(default=True)
     sequence = fields.Integer(default=10)
     company_id = fields.Many2one(
@@ -23,6 +36,19 @@ class AiAnalystDimension(models.Model):
         'dimension_id',
         string='Synonyms',
     )
+
+    @api.model
+    def normalize_existing_dimension_paths(self):
+        for rec in self.search([]):
+            values = {}
+            if not rec.sale_line_path:
+                values['sale_line_path'] = rec.field_name
+            if not rec.stock_quant_path:
+                values['stock_quant_path'] = rec.field_name
+            if not rec.purchase_line_path:
+                values['purchase_line_path'] = rec.field_name
+            if values:
+                rec.write(values)
 
     _sql_constraints = [
         ('ai_analyst_dimension_code_uniq', 'unique(code, company_id)', 'Dimension code must be unique per company.'),

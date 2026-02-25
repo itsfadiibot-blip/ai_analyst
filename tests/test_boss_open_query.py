@@ -57,15 +57,6 @@ class TestBossOpenQuery(TransactionCase):
             'pagination': {'mode': 'offset', 'limit': 5, 'offset': 0},
         }
 
-    def _base_simple_plan(self):
-        return {
-            'model': 'sale.order',
-            'domain': [('state', 'in', ['sale', 'done'])],
-            'fields': ['name', 'amount_total'],
-            'limit': 5,
-            'offset': 0,
-        }
-
     def test_boss_only_access(self):
         from odoo.addons.ai_analyst.tools.registry import get_tool
         tool = get_tool('boss_open_query')
@@ -79,23 +70,16 @@ class TestBossOpenQuery(TransactionCase):
         from odoo.addons.ai_analyst.tools.registry import get_tool
         tool = get_tool('boss_open_query')
 
-        self.env['ai.analyst.field.kb.service'].sudo().rebuild_kb(full=True)
-
         with self.assertRaises(ValidationError):
             tool.execute(self.env(user=self.boss_user.id), self.boss_user, {
                 'query_plan': {'version': '1.0', 'target_model': 'sale.order', 'pagination': {'mode': 'offset', 'limit': 100, 'offset': 0}, 'fields': [{'name': 'not_a_real_field'}]},
                 'mode': 'inline',
             })
 
-        result = tool.execute(self.env(user=self.boss_user.id), self.boss_user, {'query_plan': self._base_plan(), 'mode': 'paginated', 'user_query': 'sales orders'})
+        result = tool.execute(self.env(user=self.boss_user.id), self.boss_user, {'query_plan': self._base_plan(), 'mode': 'paginated'})
         self.assertEqual(set(result.keys()), {'answer', 'kpis', 'table', 'chart', 'actions', 'meta'})
         self.assertIn('rows', result['table'])
         self.assertLessEqual(len(result['table']['rows']), 5)
-        self.assertIn('field_mapping', result['meta'])
-
-        simple = tool.execute(self.env(user=self.boss_user.id), self.boss_user, {'query_plan': self._base_simple_plan(), 'mode': 'inline', 'user_query': 'sales orders'})
-        self.assertIn('table', simple)
-        self.assertIn('meta', simple)
 
     def test_async_export_flow(self):
         from odoo.addons.ai_analyst.tools.registry import get_tool

@@ -1,6 +1,6 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
-AI Analyst Controllers — HTTP endpoints for the chat interface.
+AI Analyst Controllers â€” HTTP endpoints for the chat interface.
 ================================================================
 """
 import base64
@@ -67,7 +67,7 @@ class AiAnalystController(http.Controller):
 
             # Enforce policy: unauthorized requested workspace is ignored.
             if requested_workspace and requested_workspace.user_has_access(user):
-                conversation.with_user(user).write({'workspace_id': requested_workspace.id})
+                conversation.with_user(user.id).write({'workspace_id': requested_workspace.id})
             elif requested_workspace and requested_workspace.id != (conversation_workspace.id if conversation_workspace else False):
                 # Ignore unauthorized workspace_id and keep conversation workspace.
                 pass
@@ -173,18 +173,6 @@ class AiAnalystController(http.Controller):
         conversation.action_archive()
         return {'success': True}
 
-    @http.route('/ai_analyst/conversation/delete', type='json', auth='user', methods=['POST'])
-    def delete_conversation(self, conversation_id, **kwargs):
-        """Permanently delete a conversation and its messages."""
-        user = request.env.user
-        conversation = request.env['ai.analyst.conversation'].browse(int(conversation_id))
-
-        if not conversation.exists() or conversation.user_id.id != user.id:
-            return {'error': 'Conversation not found or access denied.'}
-
-        conversation.unlink()
-        return {'success': True}
-
     # ------------------------------------------------------------------
     # Saved reports
     # ------------------------------------------------------------------
@@ -256,11 +244,11 @@ class AiAnalystController(http.Controller):
         if not report.tool_name:
             return {'error': 'This report cannot be pinned dynamically (missing tool metadata).'}
 
-        dashboard = request.env['ai.analyst.dashboard'].with_user(user).get_or_create_default(user)
+        dashboard = request.env['ai.analyst.dashboard'].with_user(user.id).get_or_create_default(user)
 
-        report.with_user(user).write({'is_pinned': True})
+        report.with_user(user.id).write({'is_pinned': True})
 
-        widget = request.env['ai.analyst.dashboard.widget'].with_user(user).create({
+        widget = request.env['ai.analyst.dashboard.widget'].with_user(user.id).create({
             'dashboard_id': dashboard.id,
             'user_id': user.id,
             'company_id': user.company_id.id,
@@ -270,7 +258,7 @@ class AiAnalystController(http.Controller):
             'sequence': 10,
             'width': 6,
             'height': 4,
-            'refresh_interval_seconds': 0,
+            'refresh_interval_seconds': 300,
             'active': True,
         })
 
@@ -328,16 +316,6 @@ class AiAnalystController(http.Controller):
         ]
         return request.make_response(content, headers=headers)
 
-    @http.route('/ai_analyst/ui/get_console_mode', type='json', auth='user', methods=['POST'])
-    def get_console_mode(self, **kwargs):
-        user = request.env.user
-        return {'enabled': bool(user.ai_console_mode)}
-
-    @http.route('/ai_analyst/ui/set_console_mode', type='json', auth='user', methods=['POST'])
-    def set_console_mode(self, enabled=False, **kwargs):
-        user = request.env.user
-        user.with_user(user).write({'ai_console_mode': bool(enabled)})
-        return {'ok': True, 'enabled': bool(user.ai_console_mode)}
 
     # ------------------------------------------------------------------
     # Workspaces
@@ -385,14 +363,7 @@ class AiAnalystController(http.Controller):
                     'icon': item['icon'],
                 })
 
-        # Tool names visible to this user in this workspace
-        from odoo.addons.ai_analyst.tools.registry import get_available_tools_for_user
-        user_tools = get_available_tools_for_user(user)
-        workspace_allowed = workspace.get_allowed_tool_names()
-        if workspace_allowed:
-            tool_names = sorted([name for name in user_tools.keys() if name in workspace_allowed])
-        else:
-            tool_names = sorted(list(user_tools.keys()))
+        tool_names = list(workspace.get_allowed_tool_names())
 
         return {
             'workspace_id': workspace.id,
@@ -403,26 +374,3 @@ class AiAnalystController(http.Controller):
             'dashboard_id': workspace.default_dashboard_id.id if workspace.default_dashboard_id else None,
         }
 
-    @http.route('/ai_analyst/tools/list', type='json', auth='user', methods=['POST'])
-    def list_tools(self, workspace_id=None, **kwargs):
-        """List tool names visible to the current user (optionally scoped by workspace)."""
-        user = request.env.user
-        if not user.has_group('ai_analyst.group_ai_user'):
-            return {'tool_names': []}
-
-        from odoo.addons.ai_analyst.tools.registry import get_available_tools_for_user
-        user_tools = get_available_tools_for_user(user)
-        tool_names = sorted(list(user_tools.keys()))
-
-        if workspace_id:
-            workspace = request.env['ai.analyst.workspace'].browse(int(workspace_id))
-            if not workspace.exists() or not workspace.is_active:
-                return {'tool_names': []}
-            if not workspace.user_has_access(user):
-                raise AccessError("You don't have access to that workspace.")
-
-            allowed = workspace.get_allowed_tool_names()
-            if allowed:
-                tool_names = [name for name in tool_names if name in allowed]
-
-        return {'tool_names': tool_names}

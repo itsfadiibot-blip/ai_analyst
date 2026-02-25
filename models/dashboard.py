@@ -58,7 +58,7 @@ class AiAnalystDashboardWidget(models.Model):
     sequence = fields.Integer(default=10)
     width = fields.Integer(default=6)
     height = fields.Integer(default=4)
-    refresh_interval_seconds = fields.Integer(default=0)
+    refresh_interval_seconds = fields.Integer(default=300)
     last_run_at = fields.Datetime()
     active = fields.Boolean(default=True)
 
@@ -224,6 +224,8 @@ class AiAnalystDashboardWidget(models.Model):
                 'meta': {'tool_calls': [{'tool': self.tool_name, 'params': args}]},
             }
 
-        self.with_user(user).write({'last_run_at': fields.Datetime.now()})
+        # Bug #4 fix: Use user.id instead of user recordset
+        user_id = user.id if hasattr(user, 'id') else int(user)
+        self.with_user(user_id).write({'last_run_at': fields.Datetime.now()})
         self._cache_set(cache_key, normalized)
         return normalized

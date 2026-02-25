@@ -1,0 +1,2915 @@
+{
+  "project": "Junior Couture - Odoo Knowledge Base",
+  "description": "Technical field documentation for AI assistant / Text-to-SQL RAG system. Covers all major Odoo models used in the business flow: Purchase → Inventory → Sales → Accounts.",
+  "business_context": {
+    "company": "Junior Couture Trading LLC",
+    "industry": "Kids Fashion Retail (UAE)",
+    "erp": "Odoo",
+    "currency": "AED",
+    "vat_rate": "5%",
+    "franchise_models": [
+      "Junior Couture Stores",
+      "Mayoral Franchise Stores"
+    ],
+    "product_hierarchy": {
+      "level_1_master_style": {
+        "description": "Master product style. Not a separate Odoo model. Multiple product.template records sharing the same x_studio_style_reference code are children of the same master style.",
+        "identifier_field": "x_studio_style_reference"
+      },
+      "level_2_colorway": {
+        "model": "product.template",
+        "description": "A colorway/color variant of a master style. This is the main product record. Each product.template with the same x_studio_style_reference belongs to the same master style."
+      },
+      "level_3_sku": {
+        "model": "product.product",
+        "description": "The actual SKU / size variant. Child of product.template. Also called: variant, SKU, size level. The attribute is always 'SKU' and values are sizes."
+      }
+    },
+    "order_sources": [
+      "SFCC — Salesforce Commerce Cloud (online website)",
+      "Farfetch — Farfetch marketplace",
+      "POS — Point of Sale (in-store)"
+    ],
+    "system_architecture": {
+      "flow": [
+        "User types in Odoo Chat Widget",
+        "Odoo Controller (inside custom module)",
+        "Python service layer (inside Odoo)",
+        "Claude API call (Anthropic)",
+        "Claude generates ORM domain filters or raw SQL",
+        "Odoo ORM executes against DB",
+        "Results synthesized by Claude",
+        "Answer displayed in chat widget"
+      ]
+    },
+    "delivery_flow": {
+      "type": "2-step",
+      "summary": "Every sale.order generates exactly 2 stock.picking records: PICK (Stock→Dispatch) then OUT (Dispatch→Customer)."
+    },
+    "key_model_relationships_text": "sale.order\n    ├── sale.order.line          (order_line)\n    │       ├── product.product  (product_id)\n    │       ├── stock.move       (move_ids)\n    │       └── purchase.order.line (purchase_line_ids)  [if MTO]\n    │\n    ├── stock.picking [PICK]     (picking_ids)\n    │       ├── stock.move       (move_ids)\n    │       └── stock.move.line  (move_line_ids)\n    │\n    └── stock.picking [OUT]      (picking_ids)\n            ├── stock.move       (move_ids)\n            └── stock.move.line  (move_line_ids)\n\npurchase.order\n    ├── purchase.order.line      (order_line)\n    │       └── product.product  (product_id)\n    └── stock.picking [RECEIPT]  (picking_ids)\n\nproduct.template\n    └── product.product          (product_variant_ids)\n\nstock.quant  →  current on-hand per product / location / lot"
+  },
+  "models": {
+    "purchase.order": {
+      "label": "Purchase Order",
+      "description": "Represents a purchase order placed with a vendor. Tracks all purchasing activity from confirmation through receipt and billing.",
+      "fields": {
+        "name": {
+          "label": "Order Reference",
+          "type": "char",
+          "description": "PO order number — unique identifier of the PO used for search."
+        },
+        "partner_id": {
+          "label": "Vendor",
+          "type": "many2one",
+          "relation": "res.partner",
+          "description": "The vendor this PO is placed with."
+        },
+        "state": {
+          "label": "Status",
+          "type": "selection",
+          "description": "Status of the PO. 'purchase' = confirmed, 'done' = locked (all done). Business usually progresses to 'purchase' state and stops after receipt validation. Not creating bills/payments currently.",
+          "values": {
+            "draft": "RFQ",
+            "sent": "RFQ Sent",
+            "purchase": "Purchase Order (Confirmed)",
+            "done": "Locked",
+            "cancel": "Cancelled"
+          }
+        },
+        "dest_address_id": {
+          "label": "Dropship Address",
+          "type": "many2one",
+          "relation": "res.partner",
+          "description": "Default destination location — where stock goes after receiving."
+        },
+        "date_approve": {
+          "label": "Confirmation Date",
+          "type": "datetime",
+          "description": "Date when the PO was confirmed."
+        },
+        "create_date": {
+          "label": "Created on",
+          "type": "datetime",
+          "description": "Date when the PO was created."
+        },
+        "write_date": {
+          "label": "Last Updated on",
+          "type": "datetime",
+          "description": "Updated when stock picking receipt is finished."
+        },
+        "order_line": {
+          "label": "Order Lines",
+          "type": "one2many",
+          "relation": "purchase.order.line",
+          "description": "Lines of the PO, each linked to a product.product (SKU)."
+        },
+        "currency_id": {
+          "label": "Currency",
+          "type": "many2one",
+          "relation": "res.currency",
+          "description": "Currency in which products are being purchased. Stored in currency table."
+        },
+        "currency_rate": {
+          "label": "Currency Rate",
+          "type": "float",
+          "description": "Conversion rate for the purchase currency. Stored in currency rate table."
+        },
+        "amount_untaxed": {
+          "label": "Untaxed Amount",
+          "type": "monetary",
+          "description": "Subtotal of the PO before tax."
+        },
+        "amount_tax": {
+          "label": "Taxes",
+          "type": "monetary",
+          "description": "Tax amount — usually 5% VAT in Dubai."
+        },
+        "amount_total": {
+          "label": "Total",
+          "type": "monetary",
+          "description": "Total amount after tax."
+        },
+        "invoice_count": {
+          "label": "Bill Count",
+          "type": "integer",
+          "description": "Number of bills created based on partial receiving of products."
+        },
+        "invoice_ids": {
+          "label": "Bills",
+          "type": "many2many",
+          "relation": "account.move",
+          "description": "Bills linked to this PO."
+        },
+        "invoice_status": {
+          "label": "Billing Status",
+          "type": "selection",
+          "description": "Billing status of the PO."
+        },
+        "picking_ids": {
+          "label": "Receptions",
+          "type": "many2many",
+          "relation": "stock.picking",
+          "description": "Receipts created based on partial receiving of products."
+        },
+        "picking_type_id": {
+          "label": "Deliver To",
+          "type": "many2one",
+          "relation": "stock.picking.type",
+          "description": "Operation type for receiving."
+        },
+        "incoming_picking_count": {
+          "label": "Incoming Shipment Count",
+          "type": "integer",
+          "description": "Number of incoming shipments/receipts."
+        },
+        "total_product_qty": {
+          "label": "Demand",
+          "type": "float",
+          "description": "Total demand of the entire PO — sum of all ordered quantities across all lines."
+        },
+        "total_qty_received": {
+          "label": "Received",
+          "type": "float",
+          "description": "Total quantity actually received across all receipts of the PO."
+        },
+        "total_qty_invoiced": {
+          "label": "Billed",
+          "type": "float",
+          "description": "Total quantity invoiced across all bills of the PO."
+        },
+        "receipt_status": {
+          "label": "Receipt Status",
+          "type": "selection",
+          "description": "'ready' = confirmed and about to receive. 'done' = received and validated.",
+          "values": {
+            "nothing_to_receive": "Nothing to Receive",
+            "waiting": "Waiting",
+            "ready": "Ready",
+            "full": "Fully Received"
+          }
+        },
+        "is_shipped": {
+          "label": "Is Shipped",
+          "type": "boolean",
+          "description": "Whether all goods have been shipped/received."
+        },
+        "payment_term_id": {
+          "label": "Payment Terms",
+          "type": "many2one",
+          "relation": "account.payment.term",
+          "description": "Payment terms agreed with vendor."
+        },
+        "fiscal_position_id": {
+          "label": "Fiscal Position",
+          "type": "many2one",
+          "relation": "account.fiscal.position",
+          "description": "Tax mapping for the PO."
+        },
+        "user_id": {
+          "label": "Purchase Representative",
+          "type": "many2one",
+          "relation": "res.users",
+          "description": "Internal user responsible for this PO."
+        },
+        "company_id": {
+          "label": "Company",
+          "type": "many2one",
+          "relation": "res.company",
+          "description": "Company this PO belongs to."
+        },
+        "notes": {
+          "label": "Terms and Conditions",
+          "type": "html",
+          "description": "Internal notes or T&C for this PO."
+        },
+        "date_planned": {
+          "label": "Expected Arrival",
+          "type": "datetime",
+          "description": "Expected arrival date of the goods."
+        },
+        "incoterm_id": {
+          "label": "Incoterm",
+          "type": "many2one",
+          "description": "Shipping incoterm for this PO."
+        },
+        "group_id": {
+          "label": "Procurement Group",
+          "type": "many2one",
+          "description": "Links related procurement operations together."
+        },
+        "date_order": {
+          "label": "Date Order",
+          "type": "datetime",
+          "description": "Order date"
+        },
+        "origin": {
+          "label": "Origin",
+          "type": "char",
+          "description": "Source document"
+        }
+      }
+    },
+    "purchase.order.line": {
+      "label": "Purchase Order Line",
+      "description": "Each line of a Purchase Order representing one SKU (product.product) with its ordered quantity, price, and receipt/billing status.",
+      "fields": {
+        "name": {
+          "label": "Description",
+          "type": "text",
+          "description": "Purchase description that comes along with the product line."
+        },
+        "product_id": {
+          "label": "Product",
+          "type": "many2one",
+          "relation": "product.product",
+          "description": "The SKU ordered. ID is displayed as [default_code] name — the internal reference code plus product name."
+        },
+        "product_qty": {
+          "label": "Quantity",
+          "type": "float",
+          "description": "Demand — how many units are ordered on this line."
+        },
+        "product_uom": {
+          "label": "Unit of Measure",
+          "type": "many2one",
+          "relation": "uom.uom",
+          "description": "Unit of measure for this line."
+        },
+        "price_unit": {
+          "label": "Unit Price",
+          "type": "float",
+          "description": "Cost price of this SKU — becomes standard_price in product.product after PO confirmation."
+        },
+        "discount": {
+          "label": "Discount (%)",
+          "type": "float",
+          "description": "Discount percentage applied on the unit price."
+        },
+        "price_unit_discounted": {
+          "label": "Unit Price (Discounted)",
+          "type": "float",
+          "description": "Unit price after discount."
+        },
+        "price_subtotal": {
+          "label": "Subtotal",
+          "type": "monetary",
+          "description": "Line subtotal before tax."
+        },
+        "price_total": {
+          "label": "Total",
+          "type": "monetary",
+          "description": "Line total including tax."
+        },
+        "price_tax": {
+          "label": "Tax",
+          "type": "float",
+          "description": "Tax amount for this line."
+        },
+        "taxes_id": {
+          "label": "Taxes",
+          "type": "many2many",
+          "relation": "account.tax",
+          "description": "Taxes applied on this line."
+        },
+        "date_planned": {
+          "label": "Expected Arrival",
+          "type": "datetime",
+          "description": "Expected arrival date for this line."
+        },
+        "qty_received": {
+          "label": "Received Qty",
+          "type": "float",
+          "description": "Quantity actually received for this line."
+        },
+        "qty_to_invoice": {
+          "label": "To Invoice Quantity",
+          "type": "float",
+          "description": "Billed quantity — same as received unless items are damaged."
+        },
+        "order_id": {
+          "label": "Order Reference",
+          "type": "many2one",
+          "relation": "purchase.order",
+          "description": "The parent Purchase Order this line belongs to."
+        },
+        "partner_id": {
+          "label": "Partner",
+          "type": "many2one",
+          "relation": "res.partner",
+          "description": "Vendor for this line (inherited from PO)."
+        },
+        "move_ids": {
+          "label": "Reservation",
+          "type": "one2many",
+          "relation": "stock.move",
+          "description": "Stock moves generated from this PO line."
+        },
+        "sale_order_id": {
+          "label": "Sale Order",
+          "type": "many2one",
+          "relation": "sale.order",
+          "description": "Source Sale Order if this PO was generated from a SO."
+        },
+        "sale_line_id": {
+          "label": "Origin Sale Item",
+          "type": "many2one",
+          "relation": "sale.order.line",
+          "description": "Source Sale Order Line if generated from a SO."
+        },
+        "product_uom_qty": {
+          "label": "Total Quantity",
+          "type": "float",
+          "description": "Total quantity in product UoM."
+        },
+        "qty_invoiced": {
+          "label": "Qty Invoiced",
+          "type": "float",
+          "description": "Invoiced quantity"
+        },
+        "state": {
+          "label": "State",
+          "type": "selection",
+          "description": "Line status"
+        }
+      }
+    },
+    "stock.picking": {
+      "label": "Stock Picking / Transfer",
+      "description": "Universal model used for ALL stock operations in the system. The type of operation is determined by picking_type_id. Used for: Receipts (from Purchase), Deliveries (from Sales), Internal Transfers, Pick, Pack, POS movements. The origin field links back to the source document (PO, SO, etc.).",
+      "picking_types": {
+        "Receipts": "Incoming goods from Purchase Orders",
+        "Delivery Orders": "Outgoing goods for Sales Orders",
+        "Internal Transfers": "Warehouse to warehouse or location to location",
+        "Pick": "Picking items for fulfillment",
+        "Pack": "Packing picked items",
+        "POS": "Point of Sale stock movements",
+        "PICK": {
+          "code": "internal",
+          "description": "Internal transfer Stock→Dispatch. Reference format JCUSQ/PICK/xxxxx."
+        },
+        "OUT": {
+          "code": "outgoing",
+          "description": "Outgoing transfer Dispatch→Customer. Reference format JCUSQ/OUT/xxxxx. Often waits for PICK completion."
+        }
+      },
+      "fields": {
+        "name": {
+          "label": "Reference",
+          "type": "char",
+          "description": "Receipt/Transfer ID — unique identifier used to search for a specific picking (e.g. JCUSQ/IN/00102)."
+        },
+        "origin": {
+          "label": "Source Document",
+          "type": "char",
+          "description": "The PO/SO/other document for which this picking was created. Links back to the source."
+        },
+        "state": {
+          "label": "Status",
+          "type": "selection",
+          "description": "Status of the picking.",
+          "values": {
+            "draft": "Draft",
+            "waiting": "Waiting",
+            "confirmed": "Ready",
+            "assigned": "Ready",
+            "done": "Done",
+            "cancel": "Cancelled"
+          }
+        },
+        "picking_type_id": {
+          "label": "Operation Type",
+          "type": "many2one",
+          "relation": "stock.picking.type",
+          "description": "Defines the type of picking: Receipt, Delivery, Internal Transfer, etc. This is what differentiates all picking records."
+        },
+        "partner_id": {
+          "label": "Contact",
+          "type": "many2one",
+          "relation": "res.partner",
+          "description": "Vendor or customer associated with this picking."
+        },
+        "purchase_id": {
+          "label": "Purchase Order",
+          "type": "many2one",
+          "relation": "purchase.order",
+          "description": "The Purchase Order this receipt was created for."
+        },
+        "location_id": {
+          "label": "Source Location",
+          "type": "many2one",
+          "relation": "stock.location",
+          "description": "Where stock is coming from."
+        },
+        "location_dest_id": {
+          "label": "Destination Location",
+          "type": "many2one",
+          "relation": "stock.location",
+          "description": "Where stock is going after the operation."
+        },
+        "move_ids": {
+          "label": "Stock Moves",
+          "type": "one2many",
+          "relation": "stock.move",
+          "description": "Link to stock.move — all stock in/out movements are tracked there. This is the relationship to the stock.move model."
+        },
+        "move_line_ids": {
+          "label": "Operations",
+          "type": "one2many",
+          "relation": "stock.move.line",
+          "description": "Relationship at the order line item level (stock.move.line) — detailed scan/operation level."
+        },
+        "backorder_id": {
+          "label": "Back Order of",
+          "type": "many2one",
+          "relation": "stock.picking",
+          "description": "When there is a partial delivery, backorders are created. This links the backorder to the original picking."
+        },
+        "backorder_ids": {
+          "label": "Back Orders",
+          "type": "one2many",
+          "relation": "stock.picking",
+          "description": "All backorders created from this picking."
+        },
+        "return_id": {
+          "label": "Return of",
+          "type": "many2one",
+          "relation": "stock.picking",
+          "description": "If this is a return, links to the original picking."
+        },
+        "is_return": {
+          "label": "Return",
+          "type": "boolean",
+          "description": "Flags this picking as a return operation."
+        },
+        "is_locked": {
+          "label": "Is Locked",
+          "type": "boolean",
+          "description": "Flag telling the warehouse team that someone else is already scanning/processing this picking."
+        },
+        "scheduled_date": {
+          "label": "Scheduled Date",
+          "type": "datetime",
+          "description": "Expected date of the transfer/receipt."
+        },
+        "date_done": {
+          "label": "Date of Transfer",
+          "type": "datetime",
+          "description": "When the receipt/transfer was validated and completed."
+        },
+        "date": {
+          "label": "Creation Date",
+          "type": "datetime",
+          "description": "When this picking was created."
+        },
+        "total_demand": {
+          "label": "Total Demand",
+          "type": "float",
+          "description": "Total quantity demanded on this picking/receipt."
+        },
+        "total_done": {
+          "label": "Total Done",
+          "type": "float",
+          "description": "Total quantity actually done/scanned and validated on this picking."
+        },
+        "company_id": {
+          "label": "Company",
+          "type": "many2one",
+          "relation": "res.company",
+          "description": "Company this picking belongs to."
+        },
+        "user_id": {
+          "label": "Responsible",
+          "type": "many2one",
+          "relation": "res.users",
+          "description": "User responsible for this picking."
+        },
+        "group_id": {
+          "label": "Procurement Group",
+          "type": "many2one",
+          "relation": "procurement.group",
+          "description": "Links related operations in the same procurement group."
+        },
+        "picking_type_code": {
+          "label": "Picking Type Code",
+          "type": "selection",
+          "description": "incoming, outgoing, internal"
+        },
+        "sale_id": {
+          "label": "Sale Id",
+          "type": "many2one",
+          "description": "Linked sale order → sale.order",
+          "relation": "sale.order"
+        },
+        "carrier_id": {
+          "label": "Carrier Id",
+          "type": "many2one",
+          "description": "Delivery carrier"
+        },
+        "carrier_tracking_ref": {
+          "label": "Carrier Tracking Ref",
+          "type": "char",
+          "description": "Carrier tracking reference number"
+        },
+        "carrier_tracking_url": {
+          "label": "Carrier Tracking Url",
+          "type": "char",
+          "description": "Carrier tracking URL"
+        },
+        "shipping_weight": {
+          "label": "Shipping Weight",
+          "type": "float",
+          "description": "Weight for shipping calculation"
+        },
+        "is_return_picking": {
+          "label": "Is Return Picking",
+          "type": "boolean",
+          "description": "True if this is a return transfer"
+        },
+        "is_ready_pick": {
+          "label": "Is Ready Pick",
+          "type": "boolean",
+          "description": "CUSTOM — Picker has marked items as ready to pick",
+          "custom": true
+        },
+        "is_ready_pack": {
+          "label": "Is Ready Pack",
+          "type": "boolean",
+          "description": "CUSTOM — Items are ready to be packed",
+          "custom": true
+        },
+        "is_packed": {
+          "label": "Is Packed",
+          "type": "boolean",
+          "description": "CUSTOM — Order has been packed",
+          "custom": true
+        },
+        "dubai_order": {
+          "label": "Dubai Order",
+          "type": "boolean",
+          "description": "CUSTOM — Order destined for Dubai",
+          "custom": true
+        },
+        "shj_order": {
+          "label": "Shj Order",
+          "type": "boolean",
+          "description": "CUSTOM — Order destined for Sharjah",
+          "custom": true
+        },
+        "abd_order": {
+          "label": "Abd Order",
+          "type": "boolean",
+          "description": "CUSTOM — Order destined for Abu Dhabi",
+          "custom": true
+        },
+        "int_order": {
+          "label": "Int Order",
+          "type": "boolean",
+          "description": "CUSTOM — International order",
+          "custom": true
+        },
+        "storepickuporder": {
+          "label": "Storepickuporder",
+          "type": "boolean",
+          "description": "CUSTOM — Customer will pick up from store",
+          "custom": true
+        },
+        "order_group_label": {
+          "label": "Order Group Label",
+          "type": "char",
+          "description": "CUSTOM — Categorizes order by region/type (Dubai, Sharjah, Abu Dhabi, International, StorePickup)",
+          "custom": true
+        },
+        "return_amount": {
+          "label": "Return Amount",
+          "type": "float",
+          "description": "CUSTOM — Total return amount",
+          "custom": true
+        },
+        "refund_requested": {
+          "label": "Refund Requested",
+          "type": "boolean",
+          "description": "CUSTOM — Refund has been requested",
+          "custom": true
+        },
+        "cancel_reason": {
+          "label": "Cancel Reason",
+          "type": "selection",
+          "description": "CUSTOM — Reason for cancellation",
+          "custom": true
+        },
+        "customer_related_reasons": {
+          "label": "Customer Related Reasons",
+          "type": "selection",
+          "description": "CUSTOM — Return/cancel reason: customer-related",
+          "custom": true
+        },
+        "product_related_reason": {
+          "label": "Product Related Reason",
+          "type": "selection",
+          "description": "CUSTOM — Return/cancel reason: product-related",
+          "custom": true
+        },
+        "deliver_service_related_reason": {
+          "label": "Deliver Service Related Reason",
+          "type": "selection",
+          "description": "CUSTOM — Return/cancel reason: delivery service-related",
+          "custom": true
+        },
+        "other_reason": {
+          "label": "Other Reason",
+          "type": "selection",
+          "description": "CUSTOM — Return/cancel reason: other",
+          "custom": true
+        },
+        "gift_box": {
+          "label": "Gift Box",
+          "type": "boolean",
+          "description": "CUSTOM — Customer requested gift box packaging",
+          "custom": true
+        },
+        "shipping_fee": {
+          "label": "Shipping Fee",
+          "type": "integer",
+          "description": "CUSTOM — Shipping fee charged",
+          "custom": true
+        },
+        "label_genrated": {
+          "label": "Label Genrated",
+          "type": "boolean",
+          "description": "CUSTOM — Shipping label has been generated",
+          "custom": true
+        },
+        "aramex_shipping_label": {
+          "label": "Aramex Shipping Label",
+          "type": "char",
+          "description": "CUSTOM — Aramex shipping label reference",
+          "custom": true
+        },
+        "date_delivery": {
+          "label": "Date Delivery",
+          "type": "date",
+          "description": "CUSTOM — Expected delivery date to customer",
+          "custom": true
+        },
+        "weight_shipment": {
+          "label": "Weight Shipment",
+          "type": "float",
+          "description": "CUSTOM — Weight sent to carrier for shipment",
+          "custom": true
+        },
+        "cover_amount": {
+          "label": "Cover Amount",
+          "type": "float",
+          "description": "CUSTOM — Insurance/coverage amount on shipment",
+          "custom": true
+        },
+        "subtract_value": {
+          "label": "Subtract Value",
+          "type": "float",
+          "description": "CUSTOM — Value to subtract from shipment total",
+          "custom": true
+        },
+        "locked_by": {
+          "label": "Locked By",
+          "type": "many2one",
+          "description": "CUSTOM — User who locked this picking to prevent edits",
+          "custom": true
+        },
+        "has_missing_products": {
+          "label": "Has Missing Products",
+          "type": "boolean",
+          "description": "CUSTOM — One or more products are missing/out of stock",
+          "custom": true
+        },
+        "ict_internal_transfer_id": {
+          "label": "Ict Internal Transfer Id",
+          "type": "many2one",
+          "description": "CUSTOM — Links to the inter-warehouse transfer supplying this picking",
+          "custom": true
+        },
+        "website_id": {
+          "label": "Website Id",
+          "type": "many2one",
+          "description": "Website this order originated from"
+        }
+      }
+    },
+    "product.template": {
+      "label": "Product Template (Colorway — Level 2)",
+      "description": "Represents a colorway/color variant of a master style. This is the main product record in Odoo. Multiple product.template records sharing the same x_studio_style_reference belong to the same master style. Each product.template has child SKUs (product.product) which are the size variants.",
+      "aliases": [
+        "colorway",
+        "product",
+        "template",
+        "parent product"
+      ],
+      "fields": {
+        "name": {
+          "label": "Product Name",
+          "type": "char",
+          "description": "The product/colorway name."
+        },
+        "default_code": {
+          "label": "Internal Reference",
+          "type": "char",
+          "description": "MOST IMPORTANT — unique product code used throughout the system. Main unique identity of the product at colorway level. All queries and data requests are based on this."
+        },
+        "categ_id": {
+          "label": "Product Category",
+          "type": "many2one",
+          "relation": "product.category",
+          "description": "Always set to 'All' — not used for business categorization."
+        },
+        "active": {
+          "label": "Active",
+          "type": "boolean",
+          "description": "Whether the product is archived (false) or active (true)."
+        },
+        "x_avtive": {
+          "label": "Active (Selling Status)",
+          "type": "boolean",
+          "description": "true = currently selling / false = not yet published for sale on website."
+        },
+        "detailed_type": {
+          "label": "Product Type",
+          "type": "selection",
+          "description": "Always 'Storable' — only one type used in the business."
+        },
+        "x_isNew": {
+          "label": "Is New",
+          "type": "boolean",
+          "description": "Tells the website if the product is new. Also used for sashes and other display purposes."
+        },
+        "is_exclusive": {
+          "label": "Is Exclusive",
+          "type": "boolean",
+          "description": "Marks exclusive products."
+        },
+        "hero_product": {
+          "label": "Hero Product",
+          "type": "boolean",
+          "description": "Flags the best-selling / most important products."
+        },
+        "online_datetime": {
+          "label": "Online From",
+          "type": "datetime",
+          "description": "IMPORTANT — when the product went live online. Used for inventory aging analysis, slow-moving product analysis, and sales performance over time."
+        },
+        "x_sale": {
+          "label": "Sale",
+          "type": "text",
+          "description": "Whether the product is on sale or selling at regular price."
+        },
+        "x_studio_style_reference": {
+          "label": "Studio Style Reference",
+          "type": "text",
+          "description": "MASTER STYLE CODE — links multiple colorways (product.template records) to the same master style (Level 1 → Level 2 link). All products with the same value here are siblings under one master style."
+        },
+        "x_studio_color_reference": {
+          "label": "Studio Color Reference",
+          "type": "text",
+          "description": "Color position indicator — e.g. '2nd color of 4'. Used on website to indicate which color variant this is."
+        },
+        "x_studio_many2one_field_mG9Pn": {
+          "label": "Brands",
+          "type": "many2many",
+          "relation": "x_brand",
+          "description": "IMPORTANT — brand of the product. Links to x_brand table. Each product has one brand."
+        },
+        "x_studio_many2many_field_Z7TLl": {
+          "label": "Color Tags",
+          "type": "many2many",
+          "relation": "x_color_tags",
+          "description": "Color combination description — describes the color combination of this product (e.g. 'Green & Grey', 'Blue & White')."
+        },
+        "x_studio_many2many_field_IXz60": {
+          "label": "Product Tags (Season)",
+          "type": "many2many",
+          "relation": "x_product_tags",
+          "description": "MOST IMPORTANT — season(s) the product belongs to. Links to x_product_tags table. A product can belong to many seasons. This is the primary way to filter products by season."
+        },
+        "x_productTagStyle": {
+          "label": "Product Tag Style",
+          "type": "selection",
+          "description": "Ribbon/sash style to display on website."
+        },
+        "x_productTagValue": {
+          "label": "Product Tag Value",
+          "type": "selection",
+          "description": "Ribbon/sash value to display on website."
+        },
+        "list_price": {
+          "label": "Sales Price (Template)",
+          "type": "float",
+          "description": "NOT USED — actual sale price lives at SKU level (lst_price in product.product)."
+        },
+        "standard_price": {
+          "label": "Cost (Template)",
+          "type": "float",
+          "description": "NOT USED — actual cost price lives at SKU level (standard_price in product.product)."
+        },
+        "currency_id": {
+          "label": "Currency",
+          "type": "many2one",
+          "relation": "res.currency",
+          "description": "Always AED — system base currency."
+        },
+        "uom_id": {
+          "label": "Unit of Measure",
+          "type": "many2one",
+          "relation": "uom.uom",
+          "description": "Unit of measure for the product."
+        },
+        "attribute_line_ids": {
+          "label": "Product Attributes",
+          "type": "one2many",
+          "relation": "product.template.attribute.line",
+          "description": "Attribute is always 'SKU' with size values — used to create variants (product.product children/SKUs)."
+        },
+        "product_variant_ids": {
+          "label": "Products (SKUs)",
+          "type": "one2many",
+          "relation": "product.product",
+          "description": "Relation between this colorway (parent) and its child SKUs (product.product)."
+        },
+        "product_variant_count": {
+          "label": "# Product Variants",
+          "type": "integer",
+          "description": "Number of child SKUs (sizes) under this colorway."
+        },
+        "qty_available": {
+          "label": "Quantity On Hand",
+          "type": "float",
+          "description": "Total SOH — all units in stock regardless of whether some are reserved or in active orders."
+        },
+        "total_free_qty": {
+          "label": "Total Free QTY",
+          "type": "float",
+          "description": "Sum of free_qty across all sizes (product.product children) — actual available to sell."
+        },
+        "total_purchased": {
+          "label": "Purchased",
+          "type": "float",
+          "description": "Sum of all purchased quantities across all sizes of this product."
+        },
+        "total_sold": {
+          "label": "Sold",
+          "type": "float",
+          "description": "Sum of all sold quantities across all sizes of this product."
+        },
+        "total_inprocess": {
+          "label": "Total In Process",
+          "type": "float",
+          "description": "Sum of in-process qty across all sizes — sold online but not yet picked/packed/validated."
+        },
+        "mayoral_total_soh": {
+          "label": "Mayoral Total SOH",
+          "type": "float",
+          "description": "Total SOH in Mayoral franchise stores. Included in qty_available — just an identifier to separate Mayoral stock."
+        },
+        "mayoral_total_wh_soh": {
+          "label": "Mayoral WH SOH",
+          "type": "float",
+          "description": "Mayoral franchise warehouse stock quantity."
+        },
+        "mayoral_total_store_soh": {
+          "label": "Mayoral Store SOH",
+          "type": "float",
+          "description": "Mayoral franchise store stock quantity (not used often)."
+        },
+        "mayoral_total_inprocess": {
+          "label": "Mayoral In Process",
+          "type": "float",
+          "description": "Mayoral in-process quantity (not used often)."
+        },
+        "total_ecom_soh": {
+          "label": "Ecomm SOH",
+          "type": "float",
+          "description": "total_soh minus mayoral_total_soh (not used often)."
+        },
+        "public_categ_ids": {
+          "label": "Website Product Category",
+          "type": "many2many",
+          "relation": "product.public.category",
+          "description": "ACTUAL product categories used in the business. USE THIS FIELD when filtering products by category — not categ_id."
+        },
+        "x_sfcc_primary_category": {
+          "label": "Primary Category",
+          "type": "selection",
+          "description": "One main primary category for the product."
+        },
+        "available_in_pos": {
+          "label": "Available in POS",
+          "type": "boolean",
+          "description": "Whether product is available to sell in physical store POS system."
+        },
+        "x_studio_sfcc_sales_description": {
+          "label": "Sales Description (EN)",
+          "type": "html",
+          "description": "REAL product description in English — used on website and for business queries."
+        },
+        "x_studio_arabic_sfcc_sales_description": {
+          "label": "Arabic Sales Description",
+          "type": "html",
+          "description": "REAL product description in Arabic — used on Arabic website."
+        },
+        "x_studio_sfcc_accessory_product": {
+          "label": "SFCC Accessory Products",
+          "type": "many2many",
+          "relation": "product.template",
+          "description": "'Goes with' products — other products that can be sold together with this one (e.g. shirt + hat + shorts). Displayed on website."
+        },
+        "image_1920": {
+          "label": "Image",
+          "type": "binary",
+          "description": "MAIN display image of the product. Use this when showing product images. Only show extra images if specifically asked."
+        },
+        "image": {
+          "label": "Extra Images",
+          "type": "many2many",
+          "relation": "ir.attachment",
+          "description": "Extra product images after the main image. Stored as attachments."
+        },
+        "gender1": {
+          "label": "Gender",
+          "type": "many2many",
+          "relation": "gender_table",
+          "description": "IMPORTANT for reporting. Values: baby_boy / baby_girl / unisex."
+        },
+        "age_group": {
+          "label": "Age Group",
+          "type": "selection",
+          "description": "Age group of the product. Values: baby / toddler / child."
+        },
+        "x_studio_hs_code": {
+          "label": "HS Code",
+          "type": "text",
+          "description": "Global product HS (Harmonized System) code for customs/trade."
+        },
+        "x_studio_country_of_origin_1": {
+          "label": "Country of Origin",
+          "type": "text",
+          "description": "Country where the product was manufactured/produced."
+        },
+        "x_studio_list_price": {
+          "label": "List Price (Template)",
+          "type": "monetary",
+          "description": "NOT USED — actual list price lives at SKU level (x_studio_jc_list_price in product.product)."
+        },
+        "has_lifestyle": {
+          "label": "Has Lifestyle",
+          "type": "boolean",
+          "description": "Tells if the product has a lifestyle image."
+        },
+        "ai_generated_image": {
+          "label": "AI Generated Lifestyle Image",
+          "type": "boolean",
+          "description": "Whether the product has AI generated images."
+        },
+        "studio_shoot_image": {
+          "label": "Studio Shoot Lifestyle Image",
+          "type": "boolean",
+          "description": "Whether the product has real studio-shot images."
+        },
+        "sfcc_image_url": {
+          "label": "SFCC Image URL",
+          "type": "text",
+          "description": "Image URL on the website for this product."
+        },
+        "x_comestri_ref": {
+          "label": "Comestri Reference",
+          "type": "text",
+          "description": "Reference ID for Comestri integration."
+        },
+        "sale_ok": {
+          "label": "Can be Sold",
+          "type": "boolean",
+          "description": "Always true — all products can be sold."
+        },
+        "purchase_ok": {
+          "label": "Can be Purchased",
+          "type": "boolean",
+          "description": "Always true — all products can be purchased."
+        },
+        "seller_ids": {
+          "label": "Vendors",
+          "type": "one2many",
+          "relation": "product.supplierinfo",
+          "description": "Vendor/supplier information for this product."
+        },
+        "route_ids": {
+          "label": "Routes",
+          "type": "many2many",
+          "relation": "stock.route",
+          "description": "Inventory routes for this product (e.g. replenishment rules)."
+        },
+        "categ_group": {
+          "label": "Category Group",
+          "type": "many2many",
+          "relation": "category.group",
+          "description": "Category grouping for this product."
+        },
+        "website_sequence": {
+          "label": "Website Sequence",
+          "type": "integer",
+          "description": "Order/sequence of product display on website."
+        },
+        "accessory_product_ids": {
+          "label": "Accessory Products",
+          "type": "many2many",
+          "relation": "product.product",
+          "description": "Odoo native accessory products (suggested in eCommerce cart)."
+        },
+        "alternative_product_ids": {
+          "label": "Alternative Products",
+          "type": "many2many",
+          "relation": "product.template",
+          "description": "Alternative products displayed at bottom of product pages."
+        },
+        "out_of_stock_message": {
+          "label": "Out-of-Stock Message",
+          "type": "html",
+          "description": "Message shown when product is out of stock on website."
+        },
+        "website_ribbon_id": {
+          "label": "Ribbon",
+          "type": "many2one",
+          "relation": "product.ribbon",
+          "description": "Website ribbon/badge shown on product."
+        },
+        "template_general_fields_write_date": {
+          "label": "Template Fields Write Date",
+          "type": "datetime",
+          "description": "Date when anything on the product template was last updated."
+        },
+        "extra_media_write_date": {
+          "label": "Extra Media Write Date",
+          "type": "datetime",
+          "description": "Date when extra images were last updated."
+        },
+        "x_cat_write_date": {
+          "label": "Category Write Date",
+          "type": "datetime",
+          "description": "Date when categories were last updated (added or removed)."
+        },
+        "x_sfcc_primcat_write_date": {
+          "label": "Primary Category Write Date",
+          "type": "datetime",
+          "description": "Date when the primary category was last updated."
+        },
+        "public_categ_add_ids": {
+          "label": "Added Categories",
+          "type": "char",
+          "description": "Latest categories added to this product."
+        },
+        "public_categ_add_write_date": {
+          "label": "Added Write Date",
+          "type": "datetime",
+          "description": "When categories were last added."
+        },
+        "public_categ_remove_ids": {
+          "label": "Removed Categories",
+          "type": "char",
+          "description": "Latest categories removed from this product."
+        },
+        "public_categ_remove_write_date": {
+          "label": "Removed Write Date",
+          "type": "datetime",
+          "description": "When categories were last removed."
+        },
+        "write_date": {
+          "label": "Last Updated on",
+          "type": "datetime",
+          "description": "Last updated date of the product template."
+        },
+        "create_date": {
+          "label": "Created on",
+          "type": "datetime",
+          "description": "Date product template was created."
+        },
+        "barcode": {
+          "label": "Barcode",
+          "type": "char",
+          "description": "Product barcode"
+        },
+        "type": {
+          "label": "Type",
+          "type": "selection",
+          "description": "Product type: consu (consumable), service, product (storable)",
+          "values": {
+            "consu": "consumable",
+            "service": "service",
+            "product": "storable"
+          }
+        },
+        "uom_po_id": {
+          "label": "Uom Po Id",
+          "type": "many2one",
+          "description": "Purchase unit of measure"
+        },
+        "description": {
+          "label": "Description",
+          "type": "text",
+          "description": "Internal description"
+        },
+        "description_sale": {
+          "label": "Description Sale",
+          "type": "text",
+          "description": "Description shown to customers"
+        },
+        "taxes_id": {
+          "label": "Taxes Id",
+          "type": "many2many",
+          "description": "Customer taxes"
+        },
+        "supplier_taxes_id": {
+          "label": "Supplier Taxes Id",
+          "type": "many2many",
+          "description": "Vendor taxes"
+        },
+        "weight": {
+          "label": "Weight",
+          "type": "float",
+          "description": "Product weight"
+        },
+        "volume": {
+          "label": "Volume",
+          "type": "float",
+          "description": "Product volume"
+        },
+        "tracking": {
+          "label": "Tracking",
+          "type": "selection",
+          "description": "Tracking: none, lot, serial",
+          "values": {
+            "none": "none",
+            "lot": "lot",
+            "serial": "serial"
+          }
+        }
+      }
+    },
+    "product.product": {
+      "label": "Product Variant / SKU (Level 3)",
+      "description": "The actual SKU / size variant. Child of product.template. This is the lowest level of the product hierarchy. Also called: variant, SKU, size level, product.product. Each record represents one specific size of a colorway.",
+      "aliases": [
+        "SKU",
+        "variant",
+        "size level",
+        "product.product"
+      ],
+      "note": "Actual sale price (lst_price), list/original price (x_studio_jc_list_price) and cost price (standard_price) live at THIS level — not at product.template level.",
+      "fields": {
+        "default_code": {
+          "label": "Default Code / SKU Code",
+          "type": "char",
+          "description": "MOST IMPORTANT — unique identifier of this SKU across the system. Also called: internal reference of SKU, SKU code. Used for all queries and identification."
+        },
+        "barcode": {
+          "label": "Barcode",
+          "type": "char",
+          "description": "Barcode of this specific SKU."
+        },
+        "product_tmpl_id": {
+          "label": "Product Template",
+          "type": "many2one",
+          "relation": "product.template",
+          "description": "Parent product template (colorway) this SKU belongs to."
+        },
+        "product_template_attribute_value_ids": {
+          "label": "Attribute Values",
+          "type": "many2many",
+          "relation": "product.template.attribute.value",
+          "description": "Size of this SKU. The attribute is always 'SKU' and the value is the size."
+        },
+        "lst_price": {
+          "label": "Sale Price (Current)",
+          "type": "float",
+          "description": "ACTUAL current sale price of this SKU. This is the real selling price. Also called 'current price'."
+        },
+        "x_studio_jc_list_price": {
+          "label": "JC List Price (Original)",
+          "type": "float",
+          "description": "ACTUAL original/list price of this SKU on the website. The original price before any discounts."
+        },
+        "standard_price": {
+          "label": "Cost Price",
+          "type": "float",
+          "description": "ACTUAL cost price of this SKU. Updated from purchase order unit price (price_unit in purchase.order.line)."
+        },
+        "qty_available": {
+          "label": "Quantity On Hand",
+          "type": "float",
+          "description": "Total stock for this SKU including units that are reserved or in active orders."
+        },
+        "free_qty": {
+          "label": "Free To Use Quantity (SOH)",
+          "type": "float",
+          "description": "ACTUAL available to sell quantity. Real SOH. How many units are free and available. Also called: SOH, available qty."
+        },
+        "incoming_qty": {
+          "label": "Incoming",
+          "type": "float",
+          "description": "Quantity incoming (on confirmed purchase orders not yet received)."
+        },
+        "outgoing_qty": {
+          "label": "Outgoing",
+          "type": "float",
+          "description": "Quantity outgoing (on confirmed orders not yet shipped)."
+        },
+        "sales_count": {
+          "label": "Sold",
+          "type": "float",
+          "description": "Total sold quantity of this SKU."
+        },
+        "actual_sold": {
+          "label": "Sold QTY",
+          "type": "float",
+          "description": "Actual sold quantity of this SKU."
+        },
+        "qty_purchased": {
+          "label": "Purchased QTY",
+          "type": "float",
+          "description": "Total purchased quantity for this SKU across all purchase orders."
+        },
+        "in_process": {
+          "label": "In Process",
+          "type": "float",
+          "description": "Quantity sold online but not yet picked/packed/validated — somewhere in the fulfillment process."
+        },
+        "mayoral_soh": {
+          "label": "Mayoral SOH",
+          "type": "float",
+          "description": "Units of this SKU in Mayoral franchise stock location."
+        },
+        "active": {
+          "label": "Active",
+          "type": "boolean",
+          "description": "Whether this SKU is archived (false) or active (true)."
+        },
+        "x_avtive": {
+          "label": "Active (Selling Status)",
+          "type": "boolean",
+          "description": "true = currently selling / false = not yet published for sale."
+        },
+        "x_isNew": {
+          "label": "Is New",
+          "type": "boolean",
+          "description": "Tells if this is a new product/SKU."
+        },
+        "x_sale": {
+          "label": "Sale",
+          "type": "text",
+          "description": "Whether this SKU is on sale or regular price."
+        },
+        "new_pickLocation": {
+          "label": "New Pick Locations",
+          "type": "html",
+          "description": "USED EVERYWHERE — shows how many units are available at different warehouse locations. Replaces old x_pickLocation field."
+        },
+        "x_sfcc_salpric_write_date": {
+          "label": "Sale Price Write Date",
+          "type": "datetime",
+          "description": "When the sale price (lst_price) was last updated or added."
+        },
+        "x_sfcc_lstpric_write_date": {
+          "label": "List Price Write Date",
+          "type": "datetime",
+          "description": "When the list/original price (x_studio_jc_list_price) was last updated or added."
+        },
+        "write_date": {
+          "label": "Write Date",
+          "type": "datetime",
+          "description": "Last updated date of this SKU record (default system field)."
+        },
+        "create_date": {
+          "label": "Created on",
+          "type": "datetime",
+          "description": "Date this SKU was created."
+        },
+        "display_name": {
+          "label": "Display Name",
+          "type": "char",
+          "description": "Displayed as [default_code] product_name — used for identification in dropdowns and lists."
+        },
+        "combination_indices": {
+          "label": "Combination Indices",
+          "type": "char",
+          "description": "Unique index of attribute value combination"
+        },
+        "virtual_available": {
+          "label": "Virtual Available",
+          "type": "float",
+          "description": "Forecasted quantity"
+        }
+      }
+    },
+    "stock.move.line": {
+      "label": "Individual Stock Move Detail Lines (Most granular level — one line per product/lot moved)",
+      "description": "",
+      "fields": {
+        "picking_id": {
+          "label": "Picking Id",
+          "type": "many2one",
+          "description": "Parent transfer → stock.picking",
+          "relation": "stock.picking"
+        },
+        "move_id": {
+          "label": "Move Id",
+          "type": "many2one",
+          "description": "Parent stock move → stock.move",
+          "relation": "stock.move"
+        },
+        "product_id": {
+          "label": "Product Id",
+          "type": "many2one",
+          "description": "Product variant"
+        },
+        "product_uom_id": {
+          "label": "Product Uom Id",
+          "type": "many2one",
+          "description": "Unit of measure"
+        },
+        "quantity": {
+          "label": "Quantity",
+          "type": "float",
+          "description": "Quantity demanded/reserved"
+        },
+        "qty_done": {
+          "label": "Qty Done",
+          "type": "float",
+          "description": "Raw quantity actually moved (positive number only)"
+        },
+        "display_qty_done": {
+          "label": "Display Qty Done",
+          "type": "float",
+          "description": "CUSTOM — Quantity with sign (+ incoming / − outgoing)",
+          "custom": true
+        },
+        "lot_id": {
+          "label": "Lot Id",
+          "type": "many2one",
+          "description": "Lot or serial number"
+        },
+        "lot_name": {
+          "label": "Lot Name",
+          "type": "char",
+          "description": "Lot/serial name (text)"
+        },
+        "location_id": {
+          "label": "Location Id",
+          "type": "many2one",
+          "description": "Source location (From)"
+        },
+        "location_dest_id": {
+          "label": "Location Dest Id",
+          "type": "many2one",
+          "description": "Destination location (To)"
+        },
+        "state": {
+          "label": "State",
+          "type": "selection",
+          "description": "Status of the move line"
+        },
+        "date": {
+          "label": "Date",
+          "type": "datetime",
+          "description": "Date of the move"
+        },
+        "reference": {
+          "label": "Reference",
+          "type": "char",
+          "description": "CUSTOM — Identifies what created this move: either a manual inventory update or a stock.picking reference (e.g. JCUSQ/PICK/12634)",
+          "custom": true
+        },
+        "origin": {
+          "label": "Origin",
+          "type": "char",
+          "description": "Source document"
+        },
+        "picking_type_id": {
+          "label": "Picking Type Id",
+          "type": "many2one",
+          "description": "Operation type"
+        },
+        "picking_code": {
+          "label": "Picking Code",
+          "type": "selection",
+          "description": "Type of operation: incoming, outgoing, internal",
+          "values": {
+            "incoming": "incoming",
+            "outgoing": "outgoing",
+            "internal": "internal"
+          }
+        },
+        "tracking": {
+          "label": "Tracking",
+          "type": "selection",
+          "description": "Product tracking: none, lot, serial",
+          "values": {
+            "none": "none",
+            "lot": "lot",
+            "serial": "serial"
+          }
+        },
+        "order_number": {
+          "label": "Order Number",
+          "type": "char",
+          "description": "CUSTOM — The actual business order number linked to this move (the SO or PO number that triggered the stock.picking)",
+          "custom": true
+        },
+        "move_reason": {
+          "label": "Move Reason",
+          "type": "char",
+          "description": "CUSTOM — The reason/cause for this stock move",
+          "custom": true
+        },
+        "done_qty": {
+          "label": "Done Qty",
+          "type": "float",
+          "description": "CUSTOM — Alias for quantity done",
+          "custom": true
+        },
+        "remaining_qty": {
+          "label": "Remaining Qty",
+          "type": "float",
+          "description": "CUSTOM — Remaining quantity (demand minus done)",
+          "custom": true
+        },
+        "total_sold": {
+          "label": "Total Sold",
+          "type": "float",
+          "description": "CUSTOM — Total sold quantity for this product",
+          "custom": true
+        },
+        "custom_status": {
+          "label": "Custom Status",
+          "type": "char",
+          "description": "CUSTOM — Custom status label for this move line",
+          "custom": true
+        },
+        "sale_price": {
+          "label": "Sale Price",
+          "type": "float",
+          "description": "CUSTOM — Sale price at time of move",
+          "custom": true
+        },
+        "on_hand_qty": {
+          "label": "On Hand Qty",
+          "type": "integer",
+          "description": "CUSTOM — On-hand quantity snapshot at time of move",
+          "custom": true
+        },
+        "free_qty": {
+          "label": "Free Qty",
+          "type": "float",
+          "description": "CUSTOM — Available (unreserved) quantity at time of move",
+          "custom": true
+        },
+        "purchase_product_qty": {
+          "label": "Purchase Product Qty",
+          "type": "float",
+          "description": "CUSTOM — Total purchased quantity for this product",
+          "custom": true
+        },
+        "reason": {
+          "label": "Reason",
+          "type": "char",
+          "description": "CUSTOM — Additional reason field at move line level",
+          "custom": true
+        },
+        "product_id_default_code": {
+          "label": "Product Id Default Code",
+          "type": "char",
+          "description": "Product internal reference/SKU"
+        },
+        "carrier_id": {
+          "label": "Carrier Id",
+          "type": "many2one",
+          "description": "Carrier for this delivery"
+        },
+        "destination_country_code": {
+          "label": "Destination Country Code",
+          "type": "char",
+          "description": "Destination country code"
+        },
+        "is_inventory": {
+          "label": "Is Inventory",
+          "type": "boolean",
+          "description": "True if this move was created by an inventory adjustment"
+        },
+        "picked": {
+          "label": "Picked",
+          "type": "boolean",
+          "description": "True if picker physically confirmed this item was picked"
+        },
+        "is_locked": {
+          "label": "Is Locked",
+          "type": "boolean",
+          "description": "Whether this line is locked from editing"
+        }
+      }
+    },
+    "stock.move": {
+      "label": "Stock Move (Header Level)",
+      "description": "",
+      "fields": {
+        "name": {
+          "label": "Name",
+          "type": "char",
+          "description": "Description of the move"
+        },
+        "product_id": {
+          "label": "Product Id",
+          "type": "many2one",
+          "description": "Product variant"
+        },
+        "product_uom_qty": {
+          "label": "Product Uom Qty",
+          "type": "float",
+          "description": "Demanded quantity"
+        },
+        "quantity": {
+          "label": "Quantity",
+          "type": "float",
+          "description": "Done quantity"
+        },
+        "product_uom": {
+          "label": "Product Uom",
+          "type": "many2one",
+          "description": "Unit of measure"
+        },
+        "location_id": {
+          "label": "Location Id",
+          "type": "many2one",
+          "description": "Source location"
+        },
+        "location_dest_id": {
+          "label": "Location Dest Id",
+          "type": "many2one",
+          "description": "Destination location"
+        },
+        "picking_id": {
+          "label": "Picking Id",
+          "type": "many2one",
+          "description": "Parent transfer → stock.picking",
+          "relation": "stock.picking"
+        },
+        "picking_type_id": {
+          "label": "Picking Type Id",
+          "type": "many2one",
+          "description": "Operation type"
+        },
+        "state": {
+          "label": "State",
+          "type": "selection",
+          "description": "Status: draft, confirmed, assigned, done, cancel",
+          "values": {
+            "draft": "draft",
+            "confirmed": "confirmed",
+            "assigned": "assigned",
+            "done": "done",
+            "cancel": "cancel"
+          }
+        },
+        "date": {
+          "label": "Date",
+          "type": "datetime",
+          "description": "Scheduled date"
+        },
+        "date_deadline": {
+          "label": "Date Deadline",
+          "type": "datetime",
+          "description": "Deadline"
+        },
+        "origin": {
+          "label": "Origin",
+          "type": "char",
+          "description": "Source document"
+        },
+        "sale_line_id": {
+          "label": "Sale Line Id",
+          "type": "many2one",
+          "description": "Linked sale order line → sale.order.line",
+          "relation": "sale.order.line"
+        },
+        "purchase_line_id": {
+          "label": "Purchase Line Id",
+          "type": "many2one",
+          "description": "Linked purchase order line → purchase.order.line",
+          "relation": "purchase.order.line"
+        },
+        "lot_ids": {
+          "label": "Lot Ids",
+          "type": "many2many",
+          "description": "Serial/lot numbers"
+        },
+        "move_line_ids": {
+          "label": "Move Line Ids",
+          "type": "one2many",
+          "description": "Detail lines → stock.move.line",
+          "relation": "stock.move.line"
+        },
+        "move_dest_ids": {
+          "label": "Move Dest Ids",
+          "type": "many2many",
+          "description": "Chained destination moves"
+        },
+        "move_orig_ids": {
+          "label": "Move Orig Ids",
+          "type": "many2many",
+          "description": "Chained original moves"
+        },
+        "origin_returned_move_id": {
+          "label": "Origin Returned Move Id",
+          "type": "many2one",
+          "description": "The move this is a return of"
+        },
+        "availability": {
+          "label": "Availability",
+          "type": "float",
+          "description": "Forecasted available quantity"
+        },
+        "to_refund": {
+          "label": "To Refund",
+          "type": "boolean",
+          "description": "Whether to update quantities on SO/PO on return"
+        },
+        "is_inventory": {
+          "label": "Is Inventory",
+          "type": "boolean",
+          "description": "True if created by inventory adjustment"
+        },
+        "is_locked": {
+          "label": "Is Locked",
+          "type": "boolean",
+          "description": "Locked from editing"
+        },
+        "route_ids": {
+          "label": "Route Ids",
+          "type": "many2many",
+          "description": "Inventory routes"
+        },
+        "warehouse_id": {
+          "label": "Warehouse Id",
+          "type": "many2one",
+          "description": "Warehouse"
+        },
+        "price": {
+          "label": "Price",
+          "type": "float",
+          "description": "CUSTOM — Price associated with this move",
+          "custom": true
+        },
+        "move_reason": {
+          "label": "Move Reason",
+          "type": "char",
+          "description": "CUSTOM — Reason for this move",
+          "custom": true
+        },
+        "x_pickLocation": {
+          "label": "X Picklocation",
+          "type": "char",
+          "description": "CUSTOM — Pick location reference",
+          "custom": true
+        },
+        "weight": {
+          "label": "Weight",
+          "type": "float",
+          "description": "Weight of products in this move"
+        },
+        "account_move_ids": {
+          "label": "Account Move Ids",
+          "type": "one2many",
+          "description": "Linked accounting entries (stock valuation)"
+        }
+      }
+    },
+    "stock.quant": {
+      "label": "On-Hand Inventory (Current Stock Levels)",
+      "description": "",
+      "fields": {
+        "product_id": {
+          "label": "Product Id",
+          "type": "many2one",
+          "description": "Product variant"
+        },
+        "location_id": {
+          "label": "Location Id",
+          "type": "many2one",
+          "description": "Storage location"
+        },
+        "warehouse_id": {
+          "label": "Warehouse Id",
+          "type": "many2one",
+          "description": "Warehouse"
+        },
+        "lot_id": {
+          "label": "Lot Id",
+          "type": "many2one",
+          "description": "Lot or serial number"
+        },
+        "quantity": {
+          "label": "Quantity",
+          "type": "float",
+          "description": "Physical on-hand quantity"
+        },
+        "reserved_quantity": {
+          "label": "Reserved Quantity",
+          "type": "float",
+          "description": "Quantity reserved for existing orders"
+        },
+        "available_quantity": {
+          "label": "Available Quantity",
+          "type": "float",
+          "description": "Unreserved available quantity (on_hand − reserved)"
+        },
+        "in_date": {
+          "label": "In Date",
+          "type": "datetime",
+          "description": "Date stock arrived at this location"
+        },
+        "on_hand": {
+          "label": "On Hand",
+          "type": "boolean",
+          "description": "True if this quant represents physical stock"
+        },
+        "value": {
+          "label": "Value",
+          "type": "monetary",
+          "description": "Stock valuation value"
+        },
+        "cost_method": {
+          "label": "Cost Method",
+          "type": "selection",
+          "description": "Costing method: FIFO, AVCO, Standard",
+          "values": {
+            "FIFO": "FIFO",
+            "AVCO": "AVCO",
+            "Standard": "Standard"
+          }
+        },
+        "tracking": {
+          "label": "Tracking",
+          "type": "selection",
+          "description": "Tracking type"
+        },
+        "last_count_date": {
+          "label": "Last Count Date",
+          "type": "date",
+          "description": "Date of last physical inventory count"
+        },
+        "inventory_quantity": {
+          "label": "Inventory Quantity",
+          "type": "float",
+          "description": "Counted quantity during inventory adjustment"
+        },
+        "inventory_diff_quantity": {
+          "label": "Inventory Diff Quantity",
+          "type": "float",
+          "description": "Difference between counted and system quantity"
+        },
+        "cyclic_inventory_frequency": {
+          "label": "Cyclic Inventory Frequency",
+          "type": "integer",
+          "description": "How often (in days) this location is counted"
+        },
+        "reason": {
+          "label": "Reason",
+          "type": "char",
+          "description": "CUSTOM — Reason for inventory adjustment",
+          "custom": true
+        },
+        "x_pickLocation": {
+          "label": "X Picklocation",
+          "type": "char",
+          "description": "CUSTOM — Pick location reference for warehouse operations",
+          "custom": true
+        },
+        "brand_name": {
+          "label": "Brand Name",
+          "type": "many2many",
+          "description": "CUSTOM — Brand associated with this stock",
+          "custom": true
+        },
+        "pos_order_no": {
+          "label": "Pos Order No",
+          "type": "char",
+          "description": "CUSTOM — POS order number that affected this quant",
+          "custom": true
+        }
+      }
+    },
+    "sale.order": {
+      "label": "Sale Order",
+      "description": "--- Order Source Identification --- (POS orders identified via pos.order model) --- SFCC Fields (Salesforce Commerce Cloud) --- --- Farfetch Fields --- --- Financial / Wallet / Gift Card --- --- Gift / Packaging --- --- Order Flags / Status --- --- Address Fields --- --- Booker / Assignment --- --- Carrier / Delivery --- --- Website / eCommerce ---",
+      "fields": {
+        "x_sfcc_order": {
+          "label": "X Sfcc Order",
+          "type": "integer",
+          "description": "Value = 1 if order originated from SFCC (Salesforce Commerce Cloud)"
+        },
+        "farfetch_check": {
+          "label": "Farfetch Check",
+          "type": "boolean",
+          "description": "True if this order came from Farfetch"
+        },
+        "x_sfcc_ord_taxtot": {
+          "label": "X Sfcc Ord Taxtot",
+          "type": "char",
+          "description": "Total tax charged on the order in SFCC"
+        },
+        "x_sfcc_country": {
+          "label": "X Sfcc Country",
+          "type": "text",
+          "description": "Shipping country ID from SFCC synced into Odoo"
+        },
+        "x_sfcc_city": {
+          "label": "X Sfcc City",
+          "type": "text",
+          "description": "Shipping city from SFCC synced into Odoo"
+        },
+        "x_sfcc_paymethod": {
+          "label": "X Sfcc Paymethod",
+          "type": "text",
+          "description": "Payment method used on SFCC (e.g. cod, AdyenComponent, DWallet)"
+        },
+        "x_order_write_date": {
+          "label": "X Order Write Date",
+          "type": "datetime",
+          "description": "Datetime when the order was written/synced into Odoo from SFCC"
+        },
+        "x_shipping_id": {
+          "label": "X Shipping Id",
+          "type": "char",
+          "description": "SFCC Shipment ID"
+        },
+        "locale": {
+          "label": "Locale",
+          "type": "text",
+          "description": "Locale of order origin. 18 locales total. Format: en_AE = UAE English, ar_SA = Saudi Arabic. Identifies which regional website the order came from"
+        },
+        "supProductImageURL": {
+          "label": "Supproductimageurl",
+          "type": "text",
+          "description": "SFCC product image URL"
+        },
+        "supProductLink": {
+          "label": "Supproductlink",
+          "type": "text",
+          "description": "SFCC product page URL"
+        },
+        "farfetch_order": {
+          "label": "Farfetch Order",
+          "type": "char",
+          "description": "Farfetch order number"
+        },
+        "amount_wallet": {
+          "label": "Amount Wallet",
+          "type": "float",
+          "description": "Amount the customer paid using their digital wallet"
+        },
+        "net_after_wallet": {
+          "label": "Net After Wallet",
+          "type": "float",
+          "description": "Total order value minus wallet amount paid"
+        },
+        "gift_amount": {
+          "label": "Gift Amount",
+          "type": "float",
+          "description": "Total amount paid through gift cards"
+        },
+        "net_after_gift_card": {
+          "label": "Net After Gift Card",
+          "type": "float",
+          "description": "Total order amount after deducting gift card amount"
+        },
+        "e_wallet_amount": {
+          "label": "E Wallet Amount",
+          "type": "float",
+          "description": "E-wallet amount applied to the order"
+        },
+        "return_amount": {
+          "label": "Return Amount",
+          "type": "float",
+          "description": "Total return amount if a return exists on this order"
+        },
+        "shipping_fee": {
+          "label": "Shipping Fee",
+          "type": "float",
+          "description": "Total shipping fee charged on this order"
+        },
+        "subtract_value": {
+          "label": "Subtract Value",
+          "type": "float",
+          "description": "Value subtracted from order total"
+        },
+        "cover_amount": {
+          "label": "Cover Amount",
+          "type": "float",
+          "description": "Coverage/insurance amount on shipment"
+        },
+        "gift_card": {
+          "label": "Gift Card",
+          "type": "boolean",
+          "description": "True if this order contains a gift card product"
+        },
+        "gift_wrap": {
+          "label": "Gift Wrap",
+          "type": "boolean",
+          "description": "True if this order includes gift wrapping"
+        },
+        "gift_card_message": {
+          "label": "Gift Card Message",
+          "type": "char",
+          "description": "Message to write on the gift card"
+        },
+        "gift_wrap_message": {
+          "label": "Gift Wrap Message",
+          "type": "text",
+          "description": "Message to write on the gift wrap"
+        },
+        "gift_box": {
+          "label": "Gift Box",
+          "type": "boolean",
+          "description": "True if customer requested order packed in a gift box"
+        },
+        "has_missing_products": {
+          "label": "Has Missing Products",
+          "type": "boolean",
+          "description": "True if one or more products are out of stock / insufficient inventory"
+        },
+        "missing_address": {
+          "label": "Missing Address",
+          "type": "boolean",
+          "description": "True if something is missing in the shipping address"
+        },
+        "change_address": {
+          "label": "Change Address",
+          "type": "boolean",
+          "description": "Address change status flag — always set to True to trigger address change workflow"
+        },
+        "iwt_status": {
+          "label": "Iwt Status",
+          "type": "boolean",
+          "description": "True if this order requires an Inter-Warehouse Transfer (IWT) — items need to be moved from another warehouse to the main fulfillment warehouse"
+        },
+        "shortAddress": {
+          "label": "Shortaddress",
+          "type": "char",
+          "description": "Saudi orders only — mandatory short shipping address field required by Saudi logistics"
+        },
+        "address1": {
+          "label": "Address1",
+          "type": "text",
+          "description": "Full address text"
+        },
+        "booker_id": {
+          "label": "Booker Id",
+          "type": "many2one",
+          "description": "User who booked this order with courier companies"
+        },
+        "assigned_booker_id": {
+          "label": "Assigned Booker Id",
+          "type": "many2one",
+          "description": "User assigned as booker for this order"
+        },
+        "carrier_id": {
+          "label": "Carrier Id",
+          "type": "many2one",
+          "description": "Delivery carrier"
+        },
+        "carrier_price": {
+          "label": "Carrier Price",
+          "type": "float",
+          "description": "Actual carrier charges"
+        },
+        "partner_ups_carrier_account": {
+          "label": "Partner Ups Carrier Account",
+          "type": "char",
+          "description": "Customer's UPS account number"
+        },
+        "ups_bill_my_account": {
+          "label": "Ups Bill My Account",
+          "type": "boolean",
+          "description": "True if shipping cost billed to customer's UPS account"
+        },
+        "create_package": {
+          "label": "Create Package",
+          "type": "selection",
+          "description": "Whether to create a package for this order"
+        },
+        "aramex_shipping_label": {
+          "label": "Aramex Shipping Label",
+          "type": "char",
+          "description": "Aramex shipping label reference"
+        },
+        "website_id": {
+          "label": "Website Id",
+          "type": "many2one",
+          "description": "Website this order came from"
+        }
+      }
+    },
+    "sale.order.line": {
+      "label": "Sale Order Line",
+      "description": "",
+      "fields": {
+        "order_id": {
+          "label": "Order Id",
+          "type": "many2one",
+          "description": "Parent sale order → sale.order",
+          "relation": "sale.order"
+        },
+        "product_id": {
+          "label": "Product Id",
+          "type": "many2one",
+          "description": "Product variant"
+        },
+        "product_uom_qty": {
+          "label": "Product Uom Qty",
+          "type": "float",
+          "description": "Ordered quantity"
+        },
+        "price_unit": {
+          "label": "Price Unit",
+          "type": "float",
+          "description": "Unit price"
+        },
+        "price_subtotal": {
+          "label": "Price Subtotal",
+          "type": "monetary",
+          "description": "Subtotal (excl. tax)"
+        },
+        "price_total": {
+          "label": "Price Total",
+          "type": "monetary",
+          "description": "Total (incl. tax)"
+        },
+        "discount": {
+          "label": "Discount",
+          "type": "float",
+          "description": "Discount percentage"
+        },
+        "tax_id": {
+          "label": "Tax Id",
+          "type": "many2many",
+          "description": "Taxes"
+        },
+        "qty_delivered": {
+          "label": "Qty Delivered",
+          "type": "float",
+          "description": "Delivered quantity"
+        },
+        "qty_invoiced": {
+          "label": "Qty Invoiced",
+          "type": "float",
+          "description": "Invoiced quantity"
+        },
+        "qty_to_invoice": {
+          "label": "Qty To Invoice",
+          "type": "float",
+          "description": "Quantity remaining to invoice"
+        },
+        "state": {
+          "label": "State",
+          "type": "selection",
+          "description": "Order status"
+        },
+        "move_ids": {
+          "label": "Move Ids",
+          "type": "one2many",
+          "description": "Linked stock moves"
+        },
+        "purchase_line_ids": {
+          "label": "Purchase Line Ids",
+          "type": "one2many",
+          "description": "Generated purchase order lines"
+        },
+        "route_id": {
+          "label": "Route Id",
+          "type": "many2one",
+          "description": "Inventory route"
+        },
+        "customer_lead": {
+          "label": "Customer Lead",
+          "type": "float",
+          "description": "Lead time in days"
+        },
+        "is_reward_line": {
+          "label": "Is Reward Line",
+          "type": "boolean",
+          "description": "True if this line is a loyalty/promo reward"
+        },
+        "reward_id": {
+          "label": "Reward Id",
+          "type": "many2one",
+          "description": "Linked loyalty reward"
+        },
+        "coupon_id": {
+          "label": "Coupon Id",
+          "type": "many2one",
+          "description": "Applied coupon"
+        },
+        "code": {
+          "label": "Code",
+          "type": "char",
+          "description": "CUSTOM — Contains the gift card code",
+          "custom": true
+        },
+        "message": {
+          "label": "Message",
+          "type": "text",
+          "description": "CUSTOM — Contains the gift card message",
+          "custom": true
+        },
+        "name_short": {
+          "label": "Name Short",
+          "type": "char",
+          "description": "CUSTOM — Short product name for display",
+          "custom": true
+        },
+        "is_before_confirmed_line": {
+          "label": "Is Before Confirmed Line",
+          "type": "boolean",
+          "description": "CUSTOM — True if this line was added before the order was confirmed",
+          "custom": true
+        },
+        "interwarehouse_channel_id": {
+          "label": "Interwarehouse Channel Id",
+          "type": "many2one",
+          "description": "CUSTOM — Inter-warehouse channel used for IWT fulfillment of this line",
+          "custom": true
+        },
+        "parent_line_id": {
+          "label": "Parent Line Id",
+          "type": "many2one",
+          "description": "CUSTOM — Parent SOL for bundled/linked products",
+          "custom": true
+        },
+        "linked_line_id": {
+          "label": "Linked Line Id",
+          "type": "many2one",
+          "description": "CUSTOM — Linked order line (e.g. gift wrap linked to a specific product line)",
+          "custom": true
+        }
+      }
+    }
+  },
+  "version": "February 2026",
+  "merge_metadata": {
+    "merged_at": "2026-02-23T08:10:32Z",
+    "sources": [
+      "jc_odoo_knowledge_base_v1.json",
+      "JuniorCouture_Odoo_KnowledgeBase_v1.json"
+    ],
+    "conflicts_count": 141,
+    "conflicts_sample": [
+      {
+        "path": "project",
+        "kept": "Junior Couture - Odoo Knowledge Base",
+        "ignored": "Junior Couture — Odoo Knowledge Base"
+      },
+      {
+        "path": "description",
+        "kept": "Technical field documentation for AI assistant / Text-to-SQL RAG system. Covers all major Odoo models used in the business flow: Purchase → Inventory → Sales → Accounts.",
+        "ignored": "Knowledge base for AI-assisted querying over Odoo (Products, Variants, Purchase, Inventory/Stock, Sales). Converted from internal text format."
+      },
+      {
+        "path": "business_context.company",
+        "kept": "Junior Couture Trading LLC",
+        "ignored": "Junior Couture"
+      },
+      {
+        "path": "models.product.template.label",
+        "kept": "Product Template (Colorway — Level 2)",
+        "ignored": "Product Template"
+      },
+      {
+        "path": "models.product.template.fields.name.label",
+        "kept": "Product Name",
+        "ignored": "Name"
+      },
+      {
+        "path": "models.product.template.fields.name.description",
+        "kept": "The product/colorway name.",
+        "ignored": "Product name"
+      },
+      {
+        "path": "models.product.template.fields.default_code.label",
+        "kept": "Internal Reference",
+        "ignored": "Default Code"
+      },
+      {
+        "path": "models.product.template.fields.default_code.description",
+        "kept": "MOST IMPORTANT — unique product code used throughout the system. Main unique identity of the product at colorway level. All queries and data requests are based on this.",
+        "ignored": "Internal reference code / SKU"
+      },
+      {
+        "path": "models.product.template.fields.categ_id.label",
+        "kept": "Product Category",
+        "ignored": "Categ Id"
+      },
+      {
+        "path": "models.product.template.fields.categ_id.description",
+        "kept": "Always set to 'All' — not used for business categorization.",
+        "ignored": "Internal category → product.category"
+      },
+      {
+        "path": "models.product.template.fields.uom_id.label",
+        "kept": "Unit of Measure",
+        "ignored": "Uom Id"
+      },
+      {
+        "path": "models.product.template.fields.uom_id.description",
+        "kept": "Unit of measure for the product.",
+        "ignored": "Unit of measure"
+      },
+      {
+        "path": "models.product.template.fields.list_price.label",
+        "kept": "Sales Price (Template)",
+        "ignored": "List Price"
+      },
+      {
+        "path": "models.product.template.fields.list_price.description",
+        "kept": "NOT USED — actual sale price lives at SKU level (lst_price in product.product).",
+        "ignored": "Sales price"
+      },
+      {
+        "path": "models.product.template.fields.standard_price.label",
+        "kept": "Cost (Template)",
+        "ignored": "Standard Price"
+      },
+      {
+        "path": "models.product.template.fields.standard_price.description",
+        "kept": "NOT USED — actual cost price lives at SKU level (standard_price in product.product).",
+        "ignored": "Cost price"
+      },
+      {
+        "path": "models.product.template.fields.active.description",
+        "kept": "Whether the product is archived (false) or active (true).",
+        "ignored": "Whether product is active/archived"
+      },
+      {
+        "path": "models.product.template.fields.sale_ok.label",
+        "kept": "Can be Sold",
+        "ignored": "Sale Ok"
+      },
+      {
+        "path": "models.product.template.fields.sale_ok.description",
+        "kept": "Always true — all products can be sold.",
+        "ignored": "Can be sold"
+      },
+      {
+        "path": "models.product.template.fields.purchase_ok.label",
+        "kept": "Can be Purchased",
+        "ignored": "Purchase Ok"
+      },
+      {
+        "path": "models.product.template.fields.purchase_ok.description",
+        "kept": "Always true — all products can be purchased.",
+        "ignored": "Can be purchased"
+      },
+      {
+        "path": "models.product.template.fields.seller_ids.label",
+        "kept": "Vendors",
+        "ignored": "Seller Ids"
+      },
+      {
+        "path": "models.product.template.fields.seller_ids.description",
+        "kept": "Vendor/supplier information for this product.",
+        "ignored": "Vendor pricelists"
+      },
+      {
+        "path": "models.product.template.fields.product_variant_ids.label",
+        "kept": "Products (SKUs)",
+        "ignored": "Product Variant Ids"
+      },
+      {
+        "path": "models.product.template.fields.product_variant_ids.description",
+        "kept": "Relation between this colorway (parent) and its child SKUs (product.product).",
+        "ignored": "All variants of this template"
+      },
+      {
+        "path": "models.product.template.fields.product_variant_count.label",
+        "kept": "# Product Variants",
+        "ignored": "Product Variant Count"
+      },
+      {
+        "path": "models.product.template.fields.product_variant_count.description",
+        "kept": "Number of child SKUs (sizes) under this colorway.",
+        "ignored": "Number of variants"
+      },
+      {
+        "path": "models.product.template.fields.attribute_line_ids.label",
+        "kept": "Product Attributes",
+        "ignored": "Attribute Line Ids"
+      },
+      {
+        "path": "models.product.template.fields.attribute_line_ids.description",
+        "kept": "Attribute is always 'SKU' with size values — used to create variants (product.product children/SKUs).",
+        "ignored": "Product attribute lines (size, color, etc.)"
+      },
+      {
+        "path": "models.product.template.fields.image_1920.label",
+        "kept": "Image",
+        "ignored": "Image 1920"
+      },
+      {
+        "path": "models.product.template.fields.image_1920.description",
+        "kept": "MAIN display image of the product. Use this when showing product images. Only show extra images if specifically asked.",
+        "ignored": "Product image"
+      },
+      {
+        "path": "models.product.template.fields.route_ids.label",
+        "kept": "Routes",
+        "ignored": "Route Ids"
+      },
+      {
+        "path": "models.product.template.fields.route_ids.description",
+        "kept": "Inventory routes for this product (e.g. replenishment rules).",
+        "ignored": "Inventory routes"
+      },
+      {
+        "path": "models.product.product.label",
+        "kept": "Product Variant / SKU (Level 3)",
+        "ignored": "Product Variant"
+      },
+      {
+        "path": "models.product.product.fields.product_tmpl_id.label",
+        "kept": "Product Template",
+        "ignored": "Product Tmpl Id"
+      },
+      {
+        "path": "models.product.product.fields.product_tmpl_id.description",
+        "kept": "Parent product template (colorway) this SKU belongs to.",
+        "ignored": "Parent template → product.template"
+      },
+      {
+        "path": "models.product.product.fields.product_template_attribute_value_ids.label",
+        "kept": "Attribute Values",
+        "ignored": "Product Template Attribute Value Ids"
+      },
+      {
+        "path": "models.product.product.fields.product_template_attribute_value_ids.description",
+        "kept": "Size of this SKU. The attribute is always 'SKU' and the value is the size.",
+        "ignored": "Specific attribute values for this variant (e.g. Size: 4Y, Color: Red)"
+      },
+      {
+        "path": "models.product.product.fields.default_code.label",
+        "kept": "Default Code / SKU Code",
+        "ignored": "Default Code"
+      },
+      {
+        "path": "models.product.product.fields.default_code.description",
+        "kept": "MOST IMPORTANT — unique identifier of this SKU across the system. Also called: internal reference of SKU, SKU code. Used for all queries and identification.",
+        "ignored": "Variant-level internal reference / SKU"
+      },
+      {
+        "path": "models.product.product.fields.barcode.description",
+        "kept": "Barcode of this specific SKU.",
+        "ignored": "Variant barcode"
+      },
+      {
+        "path": "models.product.product.fields.active.description",
+        "kept": "Whether this SKU is archived (false) or active (true).",
+        "ignored": "Whether this variant is active"
+      },
+      {
+        "path": "models.product.product.fields.standard_price.label",
+        "kept": "Cost Price",
+        "ignored": "Standard Price"
+      },
+      {
+        "path": "models.product.product.fields.standard_price.description",
+        "kept": "ACTUAL cost price of this SKU. Updated from purchase order unit price (price_unit in purchase.order.line).",
+        "ignored": "Variant cost price"
+      },
+      {
+        "path": "models.product.product.fields.qty_available.label",
+        "kept": "Quantity On Hand",
+        "ignored": "Qty Available"
+      },
+      {
+        "path": "models.product.product.fields.qty_available.description",
+        "kept": "Total stock for this SKU including units that are reserved or in active orders.",
+        "ignored": "On-hand quantity"
+      },
+      {
+        "path": "models.product.product.fields.free_qty.label",
+        "kept": "Free To Use Quantity (SOH)",
+        "ignored": "Free Qty"
+      },
+      {
+        "path": "models.product.product.fields.free_qty.description",
+        "kept": "ACTUAL available to sell quantity. Real SOH. How many units are free and available. Also called: SOH, available qty.",
+        "ignored": "Available (unreserved) quantity"
+      },
+      {
+        "path": "models.purchase.order.fields.name.label",
+        "kept": "Order Reference",
+        "ignored": "Name"
+      },
+      {
+        "path": "models.purchase.order.fields.name.description",
+        "kept": "PO order number — unique identifier of the PO used for search.",
+        "ignored": "PO reference number (e.g. P00810)"
+      },
+      {
+        "path": "models.purchase.order.fields.partner_id.label",
+        "kept": "Vendor",
+        "ignored": "Partner Id"
+      },
+      {
+        "path": "models.purchase.order.fields.partner_id.description",
+        "kept": "The vendor this PO is placed with.",
+        "ignored": "Vendor"
+      },
+      {
+        "path": "models.purchase.order.fields.state.label",
+        "kept": "Status",
+        "ignored": "State"
+      },
+      {
+        "path": "models.purchase.order.fields.state.description",
+        "kept": "Status of the PO. 'purchase' = confirmed, 'done' = locked (all done). Business usually progresses to 'purchase' state and stops after receipt validation. Not creating bills/payments currently.",
+        "ignored": "Status: draft, sent, purchase, done, cancel"
+      },
+      {
+        "path": "models.purchase.order.fields.state.values.draft",
+        "kept": "RFQ",
+        "ignored": "draft"
+      },
+      {
+        "path": "models.purchase.order.fields.state.values.sent",
+        "kept": "RFQ Sent",
+        "ignored": "sent"
+      },
+      {
+        "path": "models.purchase.order.fields.state.values.purchase",
+        "kept": "Purchase Order (Confirmed)",
+        "ignored": "purchase"
+      },
+      {
+        "path": "models.purchase.order.fields.state.values.done",
+        "kept": "Locked",
+        "ignored": "done"
+      },
+      {
+        "path": "models.purchase.order.fields.state.values.cancel",
+        "kept": "Cancelled",
+        "ignored": "cancel"
+      },
+      {
+        "path": "models.purchase.order.fields.date_approve.label",
+        "kept": "Confirmation Date",
+        "ignored": "Date Approve"
+      },
+      {
+        "path": "models.purchase.order.fields.date_approve.description",
+        "kept": "Date when the PO was confirmed.",
+        "ignored": "Approval date"
+      },
+      {
+        "path": "models.purchase.order.fields.date_planned.label",
+        "kept": "Expected Arrival",
+        "ignored": "Date Planned"
+      },
+      {
+        "path": "models.purchase.order.fields.date_planned.description",
+        "kept": "Expected arrival date of the goods.",
+        "ignored": "Expected delivery date"
+      },
+      {
+        "path": "models.purchase.order.fields.currency_id.label",
+        "kept": "Currency",
+        "ignored": "Currency Id"
+      },
+      {
+        "path": "models.purchase.order.fields.currency_id.description",
+        "kept": "Currency in which products are being purchased. Stored in currency table.",
+        "ignored": "Currency"
+      },
+      {
+        "path": "models.purchase.order.fields.amount_untaxed.label",
+        "kept": "Untaxed Amount",
+        "ignored": "Amount Untaxed"
+      },
+      {
+        "path": "models.purchase.order.fields.amount_untaxed.description",
+        "kept": "Subtotal of the PO before tax.",
+        "ignored": "Untaxed total"
+      },
+      {
+        "path": "models.purchase.order.fields.amount_tax.label",
+        "kept": "Taxes",
+        "ignored": "Amount Tax"
+      },
+      {
+        "path": "models.purchase.order.fields.amount_tax.description",
+        "kept": "Tax amount — usually 5% VAT in Dubai.",
+        "ignored": "Tax total"
+      },
+      {
+        "path": "models.purchase.order.fields.amount_total.label",
+        "kept": "Total",
+        "ignored": "Amount Total"
+      },
+      {
+        "path": "models.purchase.order.fields.amount_total.description",
+        "kept": "Total amount after tax.",
+        "ignored": "Grand total"
+      },
+      {
+        "path": "models.purchase.order.fields.order_line.label",
+        "kept": "Order Lines",
+        "ignored": "Order Line"
+      },
+      {
+        "path": "models.purchase.order.fields.order_line.description",
+        "kept": "Lines of the PO, each linked to a product.product (SKU).",
+        "ignored": "PO lines → purchase.order.line"
+      },
+      {
+        "path": "models.purchase.order.fields.picking_ids.label",
+        "kept": "Receptions",
+        "ignored": "Picking Ids"
+      },
+      {
+        "path": "models.purchase.order.fields.picking_ids.type",
+        "kept": "many2many",
+        "ignored": "one2many"
+      },
+      {
+        "path": "models.purchase.order.fields.picking_ids.description",
+        "kept": "Receipts created based on partial receiving of products.",
+        "ignored": "Related receipts → stock.picking"
+      },
+      {
+        "path": "models.purchase.order.fields.invoice_ids.label",
+        "kept": "Bills",
+        "ignored": "Invoice Ids"
+      },
+      {
+        "path": "models.purchase.order.fields.invoice_ids.description",
+        "kept": "Bills linked to this PO.",
+        "ignored": "Related vendor bills"
+      },
+      {
+        "path": "models.purchase.order.fields.invoice_status.label",
+        "kept": "Billing Status",
+        "ignored": "Invoice Status"
+      },
+      {
+        "path": "models.purchase.order.fields.invoice_status.description",
+        "kept": "Billing status of the PO.",
+        "ignored": "Billing status"
+      },
+      {
+        "path": "models.purchase.order.fields.user_id.label",
+        "kept": "Purchase Representative",
+        "ignored": "User Id"
+      },
+      {
+        "path": "models.purchase.order.fields.user_id.description",
+        "kept": "Internal user responsible for this PO.",
+        "ignored": "Purchase representative"
+      },
+      {
+        "path": "models.purchase.order.fields.company_id.label",
+        "kept": "Company",
+        "ignored": "Company Id"
+      },
+      {
+        "path": "models.purchase.order.fields.company_id.description",
+        "kept": "Company this PO belongs to.",
+        "ignored": "Company"
+      },
+      {
+        "path": "models.purchase.order.fields.notes.label",
+        "kept": "Terms and Conditions",
+        "ignored": "Notes"
+      },
+      {
+        "path": "models.purchase.order.fields.notes.type",
+        "kept": "html",
+        "ignored": "text"
+      },
+      {
+        "path": "models.purchase.order.fields.notes.description",
+        "kept": "Internal notes or T&C for this PO.",
+        "ignored": "Internal notes"
+      },
+      {
+        "path": "models.purchase.order.line.fields.order_id.label",
+        "kept": "Order Reference",
+        "ignored": "Order Id"
+      },
+      {
+        "path": "models.purchase.order.line.fields.order_id.description",
+        "kept": "The parent Purchase Order this line belongs to.",
+        "ignored": "Parent PO → purchase.order"
+      },
+      {
+        "path": "models.purchase.order.line.fields.product_id.label",
+        "kept": "Product",
+        "ignored": "Product Id"
+      },
+      {
+        "path": "models.purchase.order.line.fields.product_id.description",
+        "kept": "The SKU ordered. ID is displayed as [default_code] name — the internal reference code plus product name.",
+        "ignored": "Product variant"
+      },
+      {
+        "path": "models.purchase.order.line.fields.product_qty.label",
+        "kept": "Quantity",
+        "ignored": "Product Qty"
+      },
+      {
+        "path": "models.purchase.order.line.fields.product_qty.description",
+        "kept": "Demand — how many units are ordered on this line.",
+        "ignored": "Ordered quantity"
+      },
+      {
+        "path": "models.purchase.order.line.fields.qty_received.label",
+        "kept": "Received Qty",
+        "ignored": "Qty Received"
+      },
+      {
+        "path": "models.purchase.order.line.fields.qty_received.description",
+        "kept": "Quantity actually received for this line.",
+        "ignored": "Received quantity"
+      },
+      {
+        "path": "models.purchase.order.line.fields.qty_to_invoice.label",
+        "kept": "To Invoice Quantity",
+        "ignored": "Qty To Invoice"
+      },
+      {
+        "path": "models.purchase.order.line.fields.qty_to_invoice.description",
+        "kept": "Billed quantity — same as received unless items are damaged.",
+        "ignored": "Quantity to invoice"
+      },
+      {
+        "path": "models.purchase.order.line.fields.price_unit.label",
+        "kept": "Unit Price",
+        "ignored": "Price Unit"
+      },
+      {
+        "path": "models.purchase.order.line.fields.price_unit.description",
+        "kept": "Cost price of this SKU — becomes standard_price in product.product after PO confirmation.",
+        "ignored": "Unit price"
+      },
+      {
+        "path": "models.purchase.order.line.fields.price_subtotal.label",
+        "kept": "Subtotal",
+        "ignored": "Price Subtotal"
+      },
+      {
+        "path": "models.purchase.order.line.fields.price_subtotal.description",
+        "kept": "Line subtotal before tax.",
+        "ignored": "Subtotal"
+      },
+      {
+        "path": "models.purchase.order.line.fields.taxes_id.label",
+        "kept": "Taxes",
+        "ignored": "Taxes Id"
+      },
+      {
+        "path": "models.purchase.order.line.fields.taxes_id.description",
+        "kept": "Taxes applied on this line.",
+        "ignored": "Taxes"
+      },
+      {
+        "path": "models.purchase.order.line.fields.date_planned.label",
+        "kept": "Expected Arrival",
+        "ignored": "Date Planned"
+      },
+      {
+        "path": "models.purchase.order.line.fields.date_planned.description",
+        "kept": "Expected arrival date for this line.",
+        "ignored": "Scheduled delivery date"
+      },
+      {
+        "path": "models.purchase.order.line.fields.move_ids.label",
+        "kept": "Reservation",
+        "ignored": "Move Ids"
+      },
+      {
+        "path": "models.purchase.order.line.fields.move_ids.description",
+        "kept": "Stock moves generated from this PO line.",
+        "ignored": "Related stock moves"
+      },
+      {
+        "path": "models.stock.picking.label",
+        "kept": "Stock Picking / Transfer",
+        "ignored": "Transfer (PICK or OUT)"
+      },
+      {
+        "path": "models.stock.picking.fields.name.label",
+        "kept": "Reference",
+        "ignored": "Name"
+      },
+      {
+        "path": "models.stock.picking.fields.name.description",
+        "kept": "Receipt/Transfer ID — unique identifier used to search for a specific picking (e.g. JCUSQ/IN/00102).",
+        "ignored": "Transfer reference (e.g. JCUSQ/PICK/12634, JCUSQ/OUT/12004)"
+      },
+      {
+        "path": "models.stock.picking.fields.partner_id.label",
+        "kept": "Contact",
+        "ignored": "Partner Id"
+      },
+      {
+        "path": "models.stock.picking.fields.partner_id.description",
+        "kept": "Vendor or customer associated with this picking.",
+        "ignored": "Contact / delivery address"
+      },
+      {
+        "path": "models.stock.picking.fields.picking_type_id.label",
+        "kept": "Operation Type",
+        "ignored": "Picking Type Id"
+      },
+      {
+        "path": "models.stock.picking.fields.picking_type_id.description",
+        "kept": "Defines the type of picking: Receipt, Delivery, Internal Transfer, etc. This is what differentiates all picking records.",
+        "ignored": "Operation type (PICK or OUT)"
+      },
+      {
+        "path": "models.stock.picking.fields.state.label",
+        "kept": "Status",
+        "ignored": "State"
+      },
+      {
+        "path": "models.stock.picking.fields.state.description",
+        "kept": "Status of the picking.",
+        "ignored": "Status: draft, confirmed, assigned, done, cancel"
+      },
+      {
+        "path": "models.stock.picking.fields.state.values.draft",
+        "kept": "Draft",
+        "ignored": "draft"
+      },
+      {
+        "path": "models.stock.picking.fields.state.values.confirmed",
+        "kept": "Ready",
+        "ignored": "confirmed"
+      },
+      {
+        "path": "models.stock.picking.fields.state.values.assigned",
+        "kept": "Ready",
+        "ignored": "assigned"
+      },
+      {
+        "path": "models.stock.picking.fields.state.values.done",
+        "kept": "Done",
+        "ignored": "done"
+      },
+      {
+        "path": "models.stock.picking.fields.state.values.cancel",
+        "kept": "Cancelled",
+        "ignored": "cancel"
+      },
+      {
+        "path": "models.stock.picking.fields.location_id.label",
+        "kept": "Source Location",
+        "ignored": "Location Id"
+      },
+      {
+        "path": "models.stock.picking.fields.location_id.description",
+        "kept": "Where stock is coming from.",
+        "ignored": "Source location"
+      },
+      {
+        "path": "models.stock.picking.fields.location_dest_id.label",
+        "kept": "Destination Location",
+        "ignored": "Location Dest Id"
+      },
+      {
+        "path": "models.stock.picking.fields.location_dest_id.description",
+        "kept": "Where stock is going after the operation.",
+        "ignored": "Destination location"
+      },
+      {
+        "path": "models.stock.picking.fields.origin.label",
+        "kept": "Source Document",
+        "ignored": "Origin"
+      },
+      {
+        "path": "models.stock.picking.fields.origin.description",
+        "kept": "The PO/SO/other document for which this picking was created. Links back to the source.",
+        "ignored": "Source sale/purchase order reference"
+      },
+      {
+        "path": "models.stock.picking.fields.scheduled_date.description",
+        "kept": "Expected date of the transfer/receipt.",
+        "ignored": "Scheduled date"
+      },
+      {
+        "path": "models.stock.picking.fields.date_done.label",
+        "kept": "Date of Transfer",
+        "ignored": "Date Done"
+      },
+      {
+        "path": "models.stock.picking.fields.date_done.description",
+        "kept": "When the receipt/transfer was validated and completed.",
+        "ignored": "Actual completion date"
+      },
+      {
+        "path": "models.stock.picking.fields.move_ids.label",
+        "kept": "Stock Moves",
+        "ignored": "Move Ids"
+      },
+      {
+        "path": "models.stock.picking.fields.move_ids.description",
+        "kept": "Link to stock.move — all stock in/out movements are tracked there. This is the relationship to the stock.move model.",
+        "ignored": "Stock moves"
+      },
+      {
+        "path": "models.stock.picking.fields.move_line_ids.label",
+        "kept": "Operations",
+        "ignored": "Move Line Ids"
+      },
+      {
+        "path": "models.stock.picking.fields.move_line_ids.description",
+        "kept": "Relationship at the order line item level (stock.move.line) — detailed scan/operation level.",
+        "ignored": "Detailed move lines"
+      },
+      {
+        "path": "models.stock.picking.fields.backorder_id.label",
+        "kept": "Back Order of",
+        "ignored": "Backorder Id"
+      },
+      {
+        "path": "models.stock.picking.fields.backorder_id.description",
+        "kept": "When there is a partial delivery, backorders are created. This links the backorder to the original picking.",
+        "ignored": "Links to original transfer if this is a backorder"
+      },
+      {
+        "path": "models.stock.picking.fields.return_id.label",
+        "kept": "Return of",
+        "ignored": "Return Id"
+      },
+      {
+        "path": "models.stock.picking.fields.return_id.description",
+        "kept": "If this is a return, links to the original picking.",
+        "ignored": "Links to original transfer if this is a return"
+      },
+      {
+        "path": "models.stock.picking.fields.is_locked.description",
+        "kept": "Flag telling the warehouse team that someone else is already scanning/processing this picking.",
+        "ignored": "Locked from editing"
+      },
+      {
+        "path": "models.stock.picking.fields.is_return.label",
+        "kept": "Return",
+        "ignored": "Is Return"
+      },
+      {
+        "path": "models.stock.picking.fields.is_return.description",
+        "kept": "Flags this picking as a return operation.",
+        "ignored": "Return flag"
+      }
+    ]
+  }
+}

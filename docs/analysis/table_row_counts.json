@@ -1,0 +1,18 @@
+{
+  "account_move": 1271040,
+  "account_move_line": 2923146,
+  "pos_order": 34602,
+  "pos_order_line": 105524,
+  "product_attribute": 5,
+  "product_attribute_value": 321,
+  "product_category": 10,
+  "product_product": 332799,
+  "product_template": 54867,
+  "res_country": 250,
+  "res_partner": 385861,
+  "sale_order": 143751,
+  "sale_order_line": 638752,
+  "stock_location": 33535,
+  "stock_move": 2491416,
+  "stock_quant": 471153
+}

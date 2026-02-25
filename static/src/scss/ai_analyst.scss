@@ -10,12 +10,7 @@
   --ai-accent-glow: rgba(79, 107, 255, 0.35);
   --ai-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
   color: var(--ai-text);
-
-  
 }
-
-/* Dark-mode override disabled: keep Odoo light UI for AI Analyst */
-
 
 .ai-analyst-container {
   height: calc(100vh - 46px);

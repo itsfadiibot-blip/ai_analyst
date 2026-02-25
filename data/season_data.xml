@@ -2,21 +2,26 @@
 <odoo>
     <data noupdate="1">
 
-        <!-- FIXED: Seasons are stored in x_product_tags table, NOT in default_code -->
-        <!-- These patterns match exact tag names in x_product_tags -->
-
-        <!-- FW25 - Fall/Winter 2025 -->
         <record id="ai_season_fw25" model="ai.analyst.season.config">
             <field name="name">Fall/Winter 2025</field>
             <field name="code">FW25</field>
         </record>
         <record id="ai_season_fw25_p1" model="ai.analyst.season.tag.pattern">
             <field name="season_config_id" ref="ai_season_fw25"/>
+            <field name="pattern">AW25</field>
+            <field name="match_type">exact</field>
+        </record>
+        <record id="ai_season_fw25_p2" model="ai.analyst.season.tag.pattern">
+            <field name="season_config_id" ref="ai_season_fw25"/>
+            <field name="pattern">06AW25</field>
+            <field name="match_type">exact</field>
+        </record>
+        <record id="ai_season_fw25_p3" model="ai.analyst.season.tag.pattern">
+            <field name="season_config_id" ref="ai_season_fw25"/>
             <field name="pattern">FW25</field>
             <field name="match_type">exact</field>
         </record>
 
-        <!-- SS25 - Spring/Summer 2025 -->
         <record id="ai_season_ss25" model="ai.analyst.season.config">
             <field name="name">Spring/Summer 2025</field>
             <field name="code">SS25</field>
@@ -26,70 +31,29 @@
             <field name="pattern">SS25</field>
             <field name="match_type">exact</field>
         </record>
-
-        <!-- AW25 - Autumn/Winter 2025 -->
-        <record id="ai_season_aw25" model="ai.analyst.season.config">
-            <field name="name">Autumn/Winter 2025</field>
-            <field name="code">AW25</field>
-        </record>
-        <record id="ai_season_aw25_p1" model="ai.analyst.season.tag.pattern">
-            <field name="season_config_id" ref="ai_season_aw25"/>
-            <field name="pattern">AW25</field>
+        <record id="ai_season_ss25_p2" model="ai.analyst.season.tag.pattern">
+            <field name="season_config_id" ref="ai_season_ss25"/>
+            <field name="pattern">06SS25</field>
             <field name="match_type">exact</field>
         </record>
 
-        <!-- SS26 - Spring/Summer 2026 -->
-        <record id="ai_season_ss26" model="ai.analyst.season.config">
-            <field name="name">Spring/Summer 2026</field>
-            <field name="code">SS26</field>
-        </record>
-        <record id="ai_season_ss26_p1" model="ai.analyst.season.tag.pattern">
-            <field name="season_config_id" ref="ai_season_ss26"/>
-            <field name="pattern">SS26</field>
-            <field name="match_type">exact</field>
-        </record>
-
-        <!-- FW24 - Fall/Winter 2024 -->
         <record id="ai_season_fw24" model="ai.analyst.season.config">
             <field name="name">Fall/Winter 2024</field>
             <field name="code">FW24</field>
         </record>
         <record id="ai_season_fw24_p1" model="ai.analyst.season.tag.pattern">
             <field name="season_config_id" ref="ai_season_fw24"/>
-            <field name="pattern">FW24</field>
-            <field name="match_type">exact</field>
-        </record>
-
-        <!-- SS24 - Spring/Summer 2024 -->
-        <record id="ai_season_ss24" model="ai.analyst.season.config">
-            <field name="name">Spring/Summer 2024</field>
-            <field name="code">SS24</field>
-        </record>
-        <record id="ai_season_ss24_p1" model="ai.analyst.season.tag.pattern">
-            <field name="season_config_id" ref="ai_season_ss24"/>
-            <field name="pattern">SS24</field>
-            <field name="match_type">exact</field>
-        </record>
-
-        <!-- AW24 - Autumn/Winter 2024 -->
-        <record id="ai_season_aw24" model="ai.analyst.season.config">
-            <field name="name">Autumn/Winter 2024</field>
-            <field name="code">AW24</field>
-        </record>
-        <record id="ai_season_aw24_p1" model="ai.analyst.season.tag.pattern">
-            <field name="season_config_id" ref="ai_season_aw24"/>
             <field name="pattern">AW24</field>
             <field name="match_type">exact</field>
         </record>
-
-        <!-- SS23 - Spring/Summer 2023 -->
-        <record id="ai_season_ss23" model="ai.analyst.season.config">
-            <field name="name">Spring/Summer 2023</field>
-            <field name="code">SS23</field>
+        <record id="ai_season_fw24_p2" model="ai.analyst.season.tag.pattern">
+            <field name="season_config_id" ref="ai_season_fw24"/>
+            <field name="pattern">06AW24</field>
+            <field name="match_type">exact</field>
         </record>
-        <record id="ai_season_ss23_p1" model="ai.analyst.season.tag.pattern">
-            <field name="season_config_id" ref="ai_season_ss23"/>
-            <field name="pattern">SS23</field>
+        <record id="ai_season_fw24_p3" model="ai.analyst.season.tag.pattern">
+            <field name="season_config_id" ref="ai_season_fw24"/>
+            <field name="pattern">FW24</field>
             <field name="match_type">exact</field>
         </record>
 

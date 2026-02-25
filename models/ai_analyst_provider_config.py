@@ -30,8 +30,8 @@ class AiAnalystProviderConfig(models.Model):
     model_name = fields.Char(
         string='Model Name',
         required=True,
-        default='claude-sonnet-4-20250514',
-        help='Model identifier, e.g. claude-sonnet-4-20250514, gpt-4o, etc.',
+        default='claude-sonnet-4-6-latest',
+        help='Model identifier, e.g. claude-sonnet-4-6-latest, gpt-4o, etc.',
     )
 
     # --- API Configuration ---
@@ -67,15 +67,6 @@ class AiAnalystProviderConfig(models.Model):
         default=2,
         help='Number of retry attempts on transient errors',
     )
-
-    # --- Routing ---
-    cost_tier = fields.Selection([
-        ('cheap', 'Cheap'),
-        ('standard', 'Standard'),
-        ('premium', 'Premium'),
-    ], string='Cost Tier', default='standard', required=True)
-    priority = fields.Integer(string='Priority', default=10)
-    is_escalation_target = fields.Boolean(string='Escalation Target', default=False)
 
     # --- Status ---
     is_active = fields.Boolean(

@@ -32,12 +32,10 @@ class AiAnalystAction extends Component {
             inputText: "",
             isLoading: false,
             sidebarOpen: true,
-            consoleMode: false,
             // Workspace state
             workspaces: [],
             selectedWorkspaceId: null,
             workspacePrompts: [],
-            workspaceToolNames: [],
         });
 
         this.chatContainerRef = useRef("chatContainer");
@@ -45,6 +43,9 @@ class AiAnalystAction extends Component {
 
         // Chart instances for cleanup
         this._chartInstances = {};
+        this._requestSeq = 0;
+        this._activeRequestId = null;
+        this._cancelledRequestIds = new Set();
 
         onMounted(() => {
             this.loadConversations();
@@ -85,7 +86,6 @@ class AiAnalystAction extends Component {
         try {
             const result = await this.rpc("/ai_analyst/workspaces", {});
             this.state.workspaces = result.workspaces || [];
-            await this.loadVisibleTools(null);
         } catch (e) {
             console.error("Failed to load workspaces:", e);
         }
@@ -97,7 +97,6 @@ class AiAnalystAction extends Component {
             await this.loadWorkspaceContext(workspaceId);
         } else {
             this.state.workspacePrompts = [];
-            await this.loadVisibleTools(null);
         }
         // Start a new conversation when switching workspace
         this.startNewChat();
@@ -111,29 +110,12 @@ class AiAnalystAction extends Component {
             if (result.error) {
                 console.error("Workspace context error:", result.error);
                 this.state.workspacePrompts = [];
-                this.state.workspaceToolNames = [];
                 return;
             }
             this.state.workspacePrompts = result.prompts || [];
-            this.state.workspaceToolNames = result.tool_names || [];
-            if (!this.state.workspaceToolNames.length) {
-                await this.loadVisibleTools(workspaceId);
-            }
         } catch (e) {
             console.error("Failed to load workspace context:", e);
             this.state.workspacePrompts = [];
-            this.state.workspaceToolNames = [];
-        }
-    }
-
-    async loadVisibleTools(workspaceId = null) {
-        try {
-            const payload = workspaceId ? { workspace_id: workspaceId } : {};
-            const result = await this.rpc("/ai_analyst/tools/list", payload);
-            this.state.workspaceToolNames = result.tool_names || [];
-        } catch (e) {
-            console.error("Failed to load tools list:", e);
-            this.state.workspaceToolNames = [];
         }
     }
 
@@ -167,6 +149,8 @@ class AiAnalystAction extends Component {
         this.state.inputText = "";
         this.state.isLoading = true;
         this._scrollToBottom();
+        const requestId = ++this._requestSeq;
+        this._activeRequestId = requestId;
 
         try {
             const params = {
@@ -177,6 +161,10 @@ class AiAnalystAction extends Component {
                 params.workspace_id = this.state.selectedWorkspaceId;
             }
             const result = await this.rpc("/ai_analyst/chat", params);
+            if (this._cancelledRequestIds.has(requestId)) {
+                this._cancelledRequestIds.delete(requestId);
+                return;
+            }
 
             // Update conversation ID (may be new)
             if (result.conversation_id) {
@@ -199,6 +187,10 @@ class AiAnalystAction extends Component {
             setTimeout(() => this._renderCharts(), 100);
 
         } catch (e) {
+            if (this._cancelledRequestIds.has(requestId)) {
+                this._cancelledRequestIds.delete(requestId);
+                return;
+            }
             console.error("Chat error:", e);
             this.state.messages.push({
                 role: "assistant",
@@ -207,7 +199,29 @@ class AiAnalystAction extends Component {
                 create_date: new Date().toISOString(),
             });
         } finally {
-            this.state.isLoading = false;
+            if (this._activeRequestId === requestId) {
+                this.state.isLoading = false;
+                this._activeRequestId = null;
+            }
+        }
+    }
+
+    stopAnalyzing(showMessage = true) {
+        if (!this.state.isLoading || !this._activeRequestId) return;
+        this._cancelledRequestIds.add(this._activeRequestId);
+        this._activeRequestId = null;
+        this.state.isLoading = false;
+        if (showMessage) {
+            this.state.messages.push({
+                role: "assistant",
+                content: "Analysis stopped.",
+                structured_response: {
+                    answer: "Analysis stopped.",
+                    meta: { stopped_by_user: true },
+                },
+                create_date: new Date().toISOString(),
+            });
+            this._scrollToBottom();
         }
     }
 
@@ -223,6 +237,7 @@ class AiAnalystAction extends Component {
     // ------------------------------------------------------------------
 
     startNewChat() {
+        this.stopAnalyzing(false);
         this.state.currentConversationId = null;
         this.state.messages = [];
         if (this.inputRef.el) {
@@ -231,6 +246,7 @@ class AiAnalystAction extends Component {
     }
 
     selectConversation(conversationId) {
+        this.stopAnalyzing(false);
         this.loadMessages(conversationId);
     }
 
@@ -245,24 +261,6 @@ class AiAnalystAction extends Component {
             }
         } catch (e) {
             console.error("Failed to archive:", e);
-        }
-    }
-
-    async deleteConversation(conversationId) {
-        const ok = window.confirm("Delete this conversation permanently?");
-        if (!ok) return;
-        try {
-            await this.rpc("/ai_analyst/conversation/delete", {
-                conversation_id: conversationId,
-            });
-            this.loadConversations();
-            if (this.state.currentConversationId === conversationId) {
-                this.startNewChat();
-            }
-            this.notification.add("Conversation deleted.", { type: "success" });
-        } catch (e) {
-            console.error("Failed to delete conversation:", e);
-            this.notification.add("Failed to delete conversation.", { type: "danger" });
         }
     }
 
@@ -293,7 +291,11 @@ class AiAnalystAction extends Component {
     downloadCsv(response) {
         if (!response || !response.actions) return;
         const csvAction = response.actions.find(a => a.type === "download_csv");
-        if (csvAction && csvAction.attachment_id) {
+        // Bug #7 fix: Use download_url from actions instead of attachment_id
+        if (csvAction && csvAction.download_url) {
+            window.open(csvAction.download_url, "_blank");
+        } else if (csvAction && csvAction.attachment_id) {
+            // Fallback to legacy attachment download
             window.open(`/web/content/${csvAction.attachment_id}?download=true`, "_blank");
         }
     }

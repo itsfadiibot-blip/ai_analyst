@@ -37,11 +37,8 @@ access_ai_season_pattern_admin,ai.analyst.season.tag.pattern admin,model_ai_anal
 access_ai_season_pattern_manager,ai.analyst.season.tag.pattern manager,model_ai_analyst_season_tag_pattern,ai_analyst.group_ai_manager,1,0,0,0
 access_boss_export_job_boss,ai.analyst.boss.export.job boss,model_ai_analyst_boss_export_job,ai_analyst.group_boss_open_query,1,1,1,0
 access_boss_export_job_admin,ai.analyst.boss.export.job admin,model_ai_analyst_boss_export_job,ai_analyst.group_ai_admin,1,1,1,1
-access_field_kb_model_admin,ai.analyst.field.kb.model admin,model_ai_analyst_field_kb_model,ai_analyst.group_ai_admin,1,1,1,1
-access_field_kb_model_manager,ai.analyst.field.kb.model manager,model_ai_analyst_field_kb_model,ai_analyst.group_ai_manager,1,0,0,0
-access_field_kb_field_admin,ai.analyst.field.kb.field admin,model_ai_analyst_field_kb_field,ai_analyst.group_ai_admin,1,1,1,1
-access_field_kb_field_manager,ai.analyst.field.kb.field manager,model_ai_analyst_field_kb_field,ai_analyst.group_ai_manager,1,0,0,0
-access_field_kb_synonym_admin,ai.analyst.field.kb.synonym admin,model_ai_analyst_field_kb_synonym,ai_analyst.group_ai_admin,1,1,1,1
-access_field_kb_synonym_manager,ai.analyst.field.kb.synonym manager,model_ai_analyst_field_kb_synonym,ai_analyst.group_ai_manager,1,0,0,0
-access_field_kb_unmapped_admin,ai.analyst.field.kb.unmapped.log admin,model_ai_analyst_field_kb_unmapped_log,ai_analyst.group_ai_admin,1,1,1,1
-access_field_kb_unmapped_manager,ai.analyst.field.kb.unmapped.log manager,model_ai_analyst_field_kb_unmapped_log,ai_analyst.group_ai_manager,1,0,0,0
+access_computed_metric_admin,ai.analyst.computed.metric admin,model_ai_analyst_computed_metric,ai_analyst.group_ai_admin,1,1,1,1
+access_computed_metric_manager,ai.analyst.computed.metric manager,model_ai_analyst_computed_metric,ai_analyst.group_ai_manager,1,0,0,0
+access_query_cache_admin,ai.analyst.query.cache admin,model_ai_analyst_query_cache,ai_analyst.group_ai_admin,1,1,1,1
+access_query_feedback_user,ai.analyst.query.feedback user,model_ai_analyst_query_feedback,ai_analyst.group_ai_user,1,1,1,0
+access_query_feedback_admin,ai.analyst.query.feedback admin,model_ai_analyst_query_feedback,ai_analyst.group_ai_admin,1,1,1,1

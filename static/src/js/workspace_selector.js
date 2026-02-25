@@ -15,7 +15,6 @@ export class WorkspaceSelector extends Component {
     static props = {
         workspaces: { type: Array },
         selectedWorkspaceId: { type: [Number, { value: null }], optional: true },
-        toolNames: { type: Array, optional: true },
         onSelect: { type: Function },
     };
 

@@ -46,6 +46,10 @@ class AiAnalystAuditLog(models.Model):
         string='Detail (JSON)',
         help='Structured details of the event',
     )
+    executed_query = fields.Text(
+        string='Executed Query',
+        help='Normalized backend query/trace executed for this request.',
+    )
     provider = fields.Char(string='Provider')
     model_name = fields.Char(string='Model')
     tokens_input = fields.Integer(string='Input Tokens', default=0)

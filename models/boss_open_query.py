@@ -40,24 +40,6 @@ class AiAnalystBossOpenQueryService(models.AbstractModel):
         if not isinstance(plan, dict):
             raise ValidationError(_('query_plan must be an object.'))
 
-        # Backward compatible: accept both old schema and new simplified schema.
-        if 'target_model' not in plan and 'model' in plan:
-            plan = {
-                'version': '1.0',
-                'target_model': plan.get('model'),
-                'domain': plan.get('domain') or [],
-                'fields': [{'name': f} if isinstance(f, str) else f for f in (plan.get('fields') or [])],
-                'aggregations': [{'field': k, 'operator': v} for k, v in (plan.get('aggregates') or {}).items()],
-                'group_by': [{'field': g} if isinstance(g, str) else g for g in (plan.get('group_by') or [])],
-                'order_by': self._parse_order_by_string(plan.get('order_by')),
-                'pagination': {
-                    'mode': 'offset',
-                    'limit': int(plan.get('limit') or 80),
-                    'offset': int(plan.get('offset') or 0),
-                },
-                'options': plan.get('options') or {},
-            }
-
         normalized = {
             'version': str(plan.get('version') or '1.0'),
             'target_model': plan.get('target_model'),
@@ -79,17 +61,6 @@ class AiAnalystBossOpenQueryService(models.AbstractModel):
         if not model.check_access_rights('read', raise_exception=False):
             raise AccessError(_('No read access to model %s') % model_name)
 
-        kb_service = self.env['ai.analyst.field.kb.service'].sudo()
-        kb = kb_service.ensure_cache_loaded()
-        kb_model = (kb.get('models') or {}).get(model_name)
-        # Fallback for bootstrap/test phases before KB is fully built:
-        # allow model if it is not excluded by KB policy.
-        if kb_model:
-            if not kb_model.get('queryable'):
-                raise ValidationError(_('Model %s is not queryable by Field KB policy.') % model_name)
-        elif kb_service._model_is_excluded(model_name):
-            raise ValidationError(_('Model %s is not queryable by Field KB policy.') % model_name)
-
         self._validate_domain(model, normalized['domain'])
         self._normalize_fields(model, normalized)
         self._normalize_aggregations(model, normalized)
@@ -98,21 +69,6 @@ class AiAnalystBossOpenQueryService(models.AbstractModel):
         self._normalize_pagination(normalized)
         self._normalize_options(normalized)
         return normalized
-
-    def _parse_order_by_string(self, order_by):
-        if isinstance(order_by, list):
-            return order_by
-        if not order_by:
-            return []
-        if isinstance(order_by, str):
-            out = []
-            for part in [p.strip() for p in order_by.split(',') if p.strip()]:
-                bits = part.split()
-                field = bits[0]
-                direction = bits[1].lower() if len(bits) > 1 else 'asc'
-                out.append({'field': field, 'direction': 'desc' if direction == 'desc' else 'asc'})
-            return out
-        return []
 
     def _resolve_field(self, model, field_path):
         parts = (field_path or '').split('.')
@@ -128,12 +84,6 @@ class AiAnalystBossOpenQueryService(models.AbstractModel):
                 if current_field.type not in ('many2one',):
                     raise ValidationError(_('Only many2one traversal is allowed for %s') % field_path)
                 current_model = self.env[current_field.comodel_name]
-        kb = self.env['ai.analyst.field.kb.service'].sudo().ensure_cache_loaded()
-        model_fields = (kb.get('fields') or {}).get(model._name, {})
-        root = parts[0]
-        kb_meta = model_fields.get(root)
-        if kb_meta and kb_meta.get('sensitivity') != 'normal':
-            raise ValidationError(_('Field %s is restricted by Field KB sensitivity rules.') % root)
         return current_field
 
     def _validate_domain(self, model, domain):
@@ -393,20 +343,6 @@ class AiAnalystBossOpenQueryService(models.AbstractModel):
         except Exception:
             raise ValidationError(_('Invalid cursor token.'))
 
-    def count_total(self, normalized):
-        return self.env[normalized['target_model']].search_count(normalized['domain'])
-
-    def build_field_mapping_meta(self, user_query, normalized):
-        try:
-            kb_ctx = self.env['ai.analyst.field.kb.service'].with_user(self.env.user).build_field_context_text(user_query or '')
-            return {
-                'resolutions': kb_ctx.get('resolutions', []),
-                'unresolved_tokens': kb_ctx.get('unresolved_tokens', []),
-                'context_fields_sent': kb_ctx.get('context_fields_sent', 0),
-            }
-        except Exception:
-            return {'resolutions': [], 'unresolved_tokens': [], 'context_fields_sent': 0}
-
 
 class AiAnalystBossExportJob(models.Model):
     _name = 'ai.analyst.boss.export.job'
@@ -465,8 +401,8 @@ class AiAnalystBossExportJob(models.Model):
                 offset += len(rows)
                 pct = 100.0 if total <= 0 else min(99.0, (offset / float(total)) * 100.0)
                 self.write({'processed_rows': offset, 'progress_percent': pct})
-                # Never commit inside export loop; keep transaction-safe behavior
-                # for tests and normal request contexts.
+                if not self.env.registry.in_test_mode():
+                    self.env.cr.commit()
 
             payload = output.getvalue().encode('utf-8-sig')
             self.write({

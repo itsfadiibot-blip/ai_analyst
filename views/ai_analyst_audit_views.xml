@@ -19,6 +19,7 @@
                        decoration-warning="event_type == 'tool_call'"
                        decoration-danger="event_type in ('error', 'access_denied', 'rate_limit')"/>
                 <field name="summary"/>
+                <field name="executed_query" optional="hide"/>
                 <field name="provider" optional="show"/>
                 <field name="model_name" optional="show"/>
                 <field name="tokens_input" optional="hide"/>
@@ -43,17 +44,18 @@
                             <field name="conversation_id"/>
                         </group>
                         <group>
-                            <field name="provider"/>
-                            <field name="model_name"/>
-                            <field name="tokens_input"/>
-                            <field name="tokens_output"/>
-                            <field name="latency_ms"/>
-                            <field name="status_code"/>
+                            <field name="provider" invisible="event_type not in ('response', 'provider_call')"/>
+                            <field name="model_name" invisible="event_type not in ('response', 'provider_call')"/>
+                            <field name="tokens_input" invisible="event_type not in ('response', 'provider_call')"/>
+                            <field name="tokens_output" invisible="event_type not in ('response', 'provider_call')"/>
+                            <field name="latency_ms" invisible="event_type not in ('response', 'provider_call')"/>
+                            <field name="status_code" invisible="event_type != 'provider_call'"/>
                             <field name="company_id"/>
                         </group>
                     </group>
                     <group>
                         <field name="summary"/>
+                        <field name="executed_query" invisible="not executed_query"/>
                         <field name="error_message" invisible="not error_message"/>
                         <field name="detail_json" invisible="not detail_json"/>
                     </group>

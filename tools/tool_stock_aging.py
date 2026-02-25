@@ -1,8 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Tool: get_stock_aging - Identify slow-moving and aging stock.
-
-FIXED: Uses stock.quant.in_date for aging, stock.quant.value for valuation.
-"""
+"""Tool: get_stock_aging — Identify slow-moving and aging stock."""
 import logging
 from datetime import datetime, timedelta
 
@@ -17,7 +14,8 @@ class StockAgingTool(BaseTool):
     name = 'get_stock_aging'
     description = (
         'Identify slow-moving and aging stock. Shows products with stock on hand, '
-        'last sale date, days since last sale, and current valuation.'
+        'last sale date, days since last sale, and current valuation. '
+        'Useful for finding items that need clearance or reorder adjustments.'
     )
     parameters_schema = {
         'type': 'object',
@@ -27,6 +25,11 @@ class StockAgingTool(BaseTool):
                 'description': "Consider stock 'slow-moving' if no sale in this many days",
                 'default': 90,
                 'minimum': 1,
+            },
+            'warehouse_ids': {
+                'type': 'array',
+                'items': {'type': 'integer'},
+                'description': 'Filter by warehouse IDs (optional)',
             },
             'limit': {
                 'type': 'integer',
@@ -45,33 +48,36 @@ class StockAgingTool(BaseTool):
 
     def execute(self, env, user, params):
         days_threshold = params.get('days_threshold', 90)
+        warehouse_ids = params.get('warehouse_ids', [])
         limit = params.get('limit', 50)
         sort_by = params.get('sort_by', 'days_since_last_sale')
         company_id = user.company_id.id
-        currency = user.company_id.currency_id.name or 'AED'
+        currency = user.company_id.currency_id.name or 'USD'
 
         today = datetime.now().date()
         threshold_date = today - timedelta(days=days_threshold)
 
-        # FIXED: Use stock.quant for inventory data (has in_date, value, quantity)
+        # Get products with stock on hand
         Quant = env['stock.quant']
         quant_domain = [
             ('company_id', '=', company_id),
             ('quantity', '>', 0),
             ('location_id.usage', '=', 'internal'),
         ]
+        if warehouse_ids:
+            quant_domain.append(('location_id.warehouse_id', 'in', warehouse_ids))
 
-        # Group by product to get total qty and value
+        # Group by product to get total qty on hand
         quant_data = Quant.read_group(
             quant_domain,
             fields=['quantity:sum', 'value:sum'],
             groupby=['product_id'],
             orderby='quantity desc',
-            limit=500,
+            limit=500,  # Get more than needed, will filter
         )
 
+        # For each product, find the last sale date
         SOLine = env['sale.order.line']
-        SaleOrder = env['sale.order']
         rows = []
 
         for quant_row in quant_data:
@@ -82,30 +88,44 @@ class StockAgingTool(BaseTool):
             product_id = product[0]
             product_name = product[1]
             qty_on_hand = round(quant_row.get('quantity', 0) or 0, 2)
-
-            # FIXED: Use value from stock.quant
             valuation = round(quant_row.get('value', 0) or 0, 2)
 
-            # Find last sale date for this product
-            last_orders = SaleOrder.search_read(
+            # Find last sale for this product
+            last_sale = SOLine.search_read(
                 [
-                    ('order_line.product_id', '=', product_id),
-                    ('state', 'in', ['sale', 'done']),
-                    ('company_id', '=', company_id),
+                    ('product_id', '=', product_id),
+                    ('order_id.state', 'in', ['sale', 'done']),
+                    ('order_id.company_id', '=', company_id),
                 ],
-                fields=['date_order'],
-                order='date_order desc',
+                fields=['order_id.date_order'],
+                order='order_id desc',
                 limit=1,
             )
 
-            if last_orders and last_orders[0].get('date_order'):
-                last_date = last_orders[0]['date_order'].date() if hasattr(
-                    last_orders[0]['date_order'], 'date'
-                ) else datetime.strptime(
-                    str(last_orders[0]['date_order'])[:10], '%Y-%m-%d'
-                ).date()
-                days_since = (today - last_date).days
-                last_date_str = last_date.isoformat()
+            if last_sale:
+                last_sale_date = last_sale[0].get('order_id', [None, None])
+                # Handle the date from the related field
+                last_orders = env['sale.order'].search_read(
+                    [
+                        ('order_line.product_id', '=', product_id),
+                        ('state', 'in', ['sale', 'done']),
+                        ('company_id', '=', company_id),
+                    ],
+                    fields=['date_order'],
+                    order='date_order desc',
+                    limit=1,
+                )
+                if last_orders and last_orders[0].get('date_order'):
+                    last_date = last_orders[0]['date_order'].date() if hasattr(
+                        last_orders[0]['date_order'], 'date'
+                    ) else datetime.strptime(
+                        str(last_orders[0]['date_order'])[:10], '%Y-%m-%d'
+                    ).date()
+                    days_since = (today - last_date).days
+                    last_date_str = last_date.isoformat()
+                else:
+                    days_since = 9999
+                    last_date_str = None
             else:
                 days_since = 9999
                 last_date_str = None

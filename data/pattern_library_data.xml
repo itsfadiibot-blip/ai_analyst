@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <data noupdate="1">
+        <!-- Load default query patterns on module install -->
+        <function model="ai.analyst.query.pattern" name="action_load_default_patterns"/>
+        
+        <!-- Load default semantic translators on module install -->
+        <function model="ai.analyst.semantic.translator" name="action_load_default_translators"/>
+    </data>
+</odoo>

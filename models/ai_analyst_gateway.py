@@ -8,12 +8,13 @@ response formatting, and audit logging.
 """
 import json
 import logging
+import os
+import re
 import time
 from datetime import date, datetime
 
 from odoo import models, fields, api, _
 from odoo.exceptions import UserError, ValidationError, AccessError
-from . import ai_analyst_model_router  # noqa: F401
 
 _logger = logging.getLogger(__name__)
 
@@ -22,6 +23,95 @@ DEFAULT_MAX_TOOL_CALLS = 8
 DEFAULT_MAX_HISTORY_MESSAGES = 20
 DEFAULT_RATE_LIMIT_PER_MINUTE = 20
 DEFAULT_MAX_INPUT_CHARS = 8000
+
+# Response Schema JSON definition (from 04_response_schema.json)
+# NOTE: additionalProperties is True to allow graceful extension without breaking UI
+RESPONSE_SCHEMA = {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "required": ["answer"],
+    "additionalProperties": True,
+    "properties": {
+        "answer": {"type": "string", "minLength": 1},
+        "kpis": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": ["label", "value"],
+                "properties": {
+                    "label": {"type": "string"},
+                    "value": {"type": "string"},
+                    "delta": {"type": "string"},
+                    "delta_direction": {"type": "string", "enum": ["up", "down", "neutral"]},
+                    "unit": {"type": "string"},
+                    "icon": {"type": "string"}
+                }
+            }
+        },
+        "table": {
+            "type": "object",
+            "required": ["columns", "rows"],
+            "properties": {
+                "columns": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "object",
+                        "required": ["key", "label", "type"],
+                        "properties": {
+                            "key": {"type": "string"},
+                            "label": {"type": "string"},
+                            "type": {"type": "string", "enum": ["string", "number", "currency", "percentage", "date", "integer"]},
+                            "align": {"type": "string", "enum": ["left", "right", "center"]},
+                            "format": {"type": "string"}
+                        }
+                    }
+                },
+                "rows": {"type": "array", "items": {"type": "object"}},
+                "total_row": {"oneOf": [{"type": "object"}, {"type": "null"}]},
+                "truncated": {"type": "boolean"},
+                "total_count": {"type": "integer"}
+            }
+        },
+        "chart": {
+            "type": "object",
+            "properties": {
+                "type": {"type": "string", "enum": ["bar", "line", "pie", "doughnut", "stacked_bar", "horizontal_bar"]},
+                "title": {"type": "string"},
+                "labels": {"type": "array", "items": {"type": "string"}},
+                "datasets": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": ["label", "data"],
+                        "properties": {
+                            "label": {"type": "string"},
+                            "data": {"type": "array", "items": {"type": "number"}},
+                            "color": {"type": "string"}
+                        }
+                    }
+                }
+            }
+        },
+        "actions": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": ["type", "label"],
+                "properties": {
+                    "type": {"type": "string", "enum": ["download_csv", "pin_to_dashboard", "next_page", "export_async", "open_record"]},
+                    "label": {"type": "string"},
+                    "enabled": {"type": "boolean"},
+                    "download_url": {"type": "string"},
+                    "attachment_id": {"type": "integer"},
+                    "params": {"type": "object"}
+                }
+            }
+        },
+        "error": {"type": "string"},
+        "meta": {"type": "object"}
+    }
+}
 
 # System prompt template
 SYSTEM_PROMPT_TEMPLATE = """You are AI Analyst, a business intelligence assistant embedded in Odoo ERP.
@@ -62,6 +152,9 @@ Only include the keys that are relevant to the response. Always include "answer"
 class AiAnalystGateway(models.AbstractModel):
     _name = 'ai.analyst.gateway'
     _description = 'AI Analyst Gateway (Core Engine)'
+
+    # Class-level cache for KB context
+    _KB_CONTEXT_CACHE = {'path': '', 'mtime': 0.0, 'loaded_at': 0.0, 'kb_data': None}
 
     # ------------------------------------------------------------------
     # Public API
@@ -127,18 +220,19 @@ class AiAnalystGateway(models.AbstractModel):
         )
 
         try:
-            # --- Resolve workspace context (revalidated on each request) ---
-            workspace = conversation.workspace_id
-            workspace_ctx = self._resolve_workspace_context(workspace, user)
+            if self._universal_query_enabled() and self._classify_intent(user_message) == 'universal_query':
+                try:
+                    result = self._run_universal_query(conversation, user, company, user_message, start_time)
+                    if not result.get('error'):
+                        return result
+                    _logger.info('Universal query failed, falling back to specialized tools: %s', result.get('error'))
+                except Exception as uq_err:
+                    _logger.warning('Universal query error, falling back to specialized tools: %s', uq_err)
 
-            # --- Get provider via model router ---
-            router = self.env['ai.analyst.model.router']
-            history_for_routing = conversation.get_history_for_ai(
-                max_messages=int(self.env['ir.config_parameter'].sudo().get_param(
-                    'ai_analyst.max_history_messages', DEFAULT_MAX_HISTORY_MESSAGES
-                ))
+            # --- Get provider ---
+            provider_config = self.env['ai.analyst.provider.config'].get_default_provider(
+                company_id=company.id
             )
-            provider_config = router.select_provider(user, workspace, user_message, history_for_routing)
             if not provider_config:
                 return self._error_response(
                     'No AI provider configured. Please contact your administrator.'
@@ -146,8 +240,12 @@ class AiAnalystGateway(models.AbstractModel):
 
             provider = self._get_provider_instance(provider_config)
 
+            # --- Resolve workspace context (revalidated on each request) ---
+            workspace = conversation.workspace_id
+            workspace_ctx = self._resolve_workspace_context(workspace, user)
+
             # --- Build messages for the AI ---
-            system_prompt = self._build_system_prompt(user, company, workspace_ctx, user_message=user_message)
+            system_prompt = self._build_system_prompt(user, company, workspace_ctx, message=user_message)
             history = conversation.get_history_for_ai(
                 max_messages=int(self.env['ir.config_parameter'].sudo().get_param(
                     'ai_analyst.max_history_messages', DEFAULT_MAX_HISTORY_MESSAGES
@@ -180,27 +278,6 @@ class AiAnalystGateway(models.AbstractModel):
                 max_tokens=provider_config.max_tokens,
                 temperature=provider_config.temperature,
             )
-
-            # Escalate model immediately when router detects low-quality first response
-            if router.should_escalate(ai_response, [], provider_config.cost_tier):
-                escalated_config = router._get_escalation_provider(provider_config)
-                if escalated_config and escalated_config.id != provider_config.id:
-                    self._log_audit(
-                        user, company, 'model_escalation',
-                        summary=f'Escalated from {provider_config.model_name} to {escalated_config.model_name}',
-                        conversation_id=conversation.id,
-                        provider=escalated_config.provider_type,
-                        model_name=escalated_config.model_name,
-                    )
-                    provider_config = escalated_config
-                    provider = self._get_provider_instance(provider_config)
-                    ai_response = provider.chat(
-                        system=system_prompt,
-                        messages=messages,
-                        tools=tool_schemas,
-                        max_tokens=provider_config.max_tokens,
-                        temperature=provider_config.temperature,
-                    )
 
             while ai_response.tool_calls and tool_call_count < max_tool_calls:
                 tool_results = []
@@ -236,22 +313,13 @@ class AiAnalystGateway(models.AbstractModel):
                     max_tokens=provider_config.max_tokens,
                     temperature=provider_config.temperature,
                 )
-                # Persist iterative tool context across rounds (prevents re-trying the same plan forever)
-                messages = messages_with_tools
 
             # --- Parse the final response ---
             elapsed_ms = int((time.time() - start_time) * 1000)
-            if ai_response.tool_calls and tool_call_count >= max_tool_calls:
-                structured = {
-                    'answer': (
-                        'I could not complete this query within the tool-call limit. '
-                        'Please narrow the request (date range / filters) or verify the requested dimension mapping '
-                        '(for example, season code mapping like FW25).'
-                    ),
-                    'error': 'Tool-call limit reached before final answer.',
-                }
-            else:
-                structured = self._parse_ai_response(ai_response.content)
+            structured = self._parse_ai_response(ai_response.content)
+
+            # Bug #12 fix: Validate response against mandatory Response Schema v2
+            structured = self._ensure_valid_response(structured)
 
             # Add meta information
             structured['meta'] = {
@@ -323,8 +391,444 @@ class AiAnalystGateway(models.AbstractModel):
     # Private helpers
     # ------------------------------------------------------------------
 
-    def _build_system_prompt(self, user, company, workspace_ctx=None, user_message=''):
-        """Build the system prompt with context variables and optional workspace/field-KB context."""
+    def _universal_query_enabled(self):
+        return str(self.env['ir.config_parameter'].sudo().get_param('ai_analyst.universal_query_enabled', 'True')).lower() in ('1', 'true', 'yes')
+
+    def _classify_intent(self, message):
+        text = (message or '').lower()
+        if any(k in text for k in ['hi', 'hello', 'how are you']) and len(text.split()) <= 6:
+            return 'chitchat'
+        # Data-query signals: business keywords, aggregation phrases, question patterns
+        if re.search(
+            r'\b(sales|stock|inventory|margin|orders?|count|revenue|pos|purchase|top'
+            r'|product|products|customer|customers|invoice|invoices|vendor|supplier'
+            r'|profit|cost|price|warehouse|quantity|amount|total|average|sum'
+            r'|how\s+many|how\s+much|number\s+of|what\s+is\s+the|give\s+me'
+            r'|show\s+me|list|report|breakdown|compare|trend|growth'
+            r'|category|brand|payment|refund|return|deliver|shipping'
+            r'|expense|budget|forecast|target|goal|kpi'
+            r')\b', text
+        ):
+            return 'universal_query'
+        # Default: any question-like message goes to universal_query as well
+        if text.strip().endswith('?') or re.search(r'^(what|how|who|where|when|which|why|do we|are there|is there)\b', text.strip()):
+            return 'universal_query'
+        return 'specialized_tool'
+
+    def _run_universal_query(self, conversation, user, company, user_message, start_time):
+        """Execute universal query with Pattern Library + AI fallback."""
+        
+        # === PHASE 4: Try Pattern Library First ===
+        pattern_lib = self.env['ai.analyst.query.pattern']
+        translator = self.env['ai.analyst.semantic.translator']
+        
+        _logger.info('Pattern Library: Checking for patterns...')
+        
+        # Extract basic entities from the message
+        extracted_entities = self._extract_entities(user_message)
+        _logger.info('Pattern Library: Extracted entities: %s', extracted_entities)
+        
+        # Try to find a matching pattern
+        matched_pattern = pattern_lib.find_best_pattern(user_message, extracted_entities)
+        
+        if matched_pattern:
+            _logger.info('Pattern Library: Matched pattern "%s"', matched_pattern.name)
+            try:
+                # Apply semantic translation to entities
+                translated_entities = self._translate_entities(extracted_entities, translator)
+                _logger.info('Pattern Library: Translated entities: %s', translated_entities)
+                
+                # Build query plan from pattern
+                plan = matched_pattern.build_query_plan(user_message, translated_entities)
+                _logger.info('Pattern Library: Built plan: %s', plan)
+                
+                if plan:
+                    # Execute the pattern-based plan
+                    return self._execute_pattern_plan(
+                        conversation, user, company, user_message, 
+                        plan, matched_pattern.name, start_time
+                    )
+            except Exception as e:
+                _logger.warning('Pattern-based query failed, falling back to AI planner: %s', e)
+        else:
+            _logger.info('Pattern Library: No pattern matched, using AI planner')
+        
+        # === Fallback: Original AI Planner ===
+        planner = self.env['ai.analyst.query.planner']
+        validator = self.env['ai.analyst.query.plan.validator']
+        orchestrator = self.env['ai.analyst.query.orchestrator']
+        cache_model = self.env['ai.analyst.query.cache']
+
+        tier_chain = ['cheap', 'standard', 'premium']
+        plan = None
+        validation = {'valid': False, 'errors': ['no plan'], 'warnings': []}
+        escalation_trace = []
+        for tier in tier_chain:
+            candidate = planner.plan(user=user, question=user_message, conversation_context={'conversation_id': conversation.id}, tier=tier)
+            verdict = validator.validate(user, candidate)
+            escalation_trace.append({'tier': tier, 'valid': verdict['valid'], 'errors': verdict.get('errors', [])[:2]})
+            if verdict['valid']:
+                plan = candidate
+                validation = verdict
+                break
+        if not plan:
+            return self._error_response('Unable to build a safe query plan: %s' % '; '.join(validation['errors'][:3]))
+
+        cached = cache_model.get_cached(plan)
+        payload = cached if cached is not None else orchestrator.run(user, plan)
+        if cached is None:
+            cache_model.set_cached(plan, payload, ttl_seconds=300)
+
+        elapsed_ms = int((time.time() - start_time) * 1000)
+        explain_mode = 'explain' in (user_message or '').lower() and 'plan' in (user_message or '').lower()
+        table_rows = []
+        if plan.get('steps'):
+            first = payload['steps'].get(plan['steps'][0]['id'])
+            table_rows = first if isinstance(first, list) else [first]
+
+        if explain_mode:
+            answer = 'Plan generated and validated. Execution included.'
+        elif plan.get('steps'):
+            # Generate a meaningful answer from the data
+            step = plan['steps'][0]
+            model_name = step.get('model', '').replace('.', ' ').title()
+            row_count = len(table_rows)
+            answer = f"Found {row_count} records from {model_name}."
+        else:
+            answer = 'Universal query executed successfully.'
+
+        structured = {
+            'answer': answer,
+            'table': {'columns': [], 'rows': table_rows, 'total_row': None},
+            'meta': {
+                'route': 'universal_query',
+                'query_plan': plan,
+                'validation': validation,
+                'cached': cached is not None,
+                'escalation_trace': escalation_trace,
+                'total_time_ms': elapsed_ms,
+            },
+        }
+
+        # Bug #12 fix: Validate response against mandatory Response Schema v2
+        structured = self._ensure_valid_response(structured)
+
+        self.env['ai.analyst.message'].create({
+            'conversation_id': conversation.id,
+            'role': 'assistant',
+            'content': structured.get('answer', answer),
+            'structured_response': json.dumps(structured, default=str),
+            'processing_time_ms': elapsed_ms,
+        })
+        return structured
+
+    def _extract_entities(self, message):
+        """Extract entities from user message for pattern matching."""
+        text = (message or '').lower()
+        entities = {
+            'target': None,
+            'season': None,
+            'color': None,
+            'date_range': None,
+            'operation': None,
+            'status': None,
+        }
+        
+        # Detect target entity
+        if any(k in text for k in ['product', 'item', 'sku']):
+            entities['target'] = 'product'
+        elif any(k in text for k in ['order', 'sale', 'revenue']):
+            entities['target'] = 'order'
+        elif any(k in text for k in ['customer', 'client']):
+            entities['target'] = 'customer'
+        elif any(k in text for k in ['stock', 'inventory', 'quantity']):
+            entities['target'] = 'inventory'
+        
+        # Detect season codes (FW25, SS26, etc.)
+        season_match = re.search(r'\b(FW|SS)\d{2,4}\b', message, re.IGNORECASE)
+        if season_match:
+            entities['season'] = season_match.group(0).upper()
+        
+        # Detect color mentions
+        colors = ['red', 'blue', 'black', 'white', 'green', 'yellow', 'pink', 'purple', 'orange', 'grey', 'gray', 'brown']
+        for color in colors:
+            if color in text:
+                entities['color'] = color
+                break
+        
+        # Detect operation
+        if any(k in text for k in ['how many', 'count', 'number of']):
+            entities['operation'] = 'count'
+        elif any(k in text for k in ['total', 'sum', 'revenue']):
+            entities['operation'] = 'sum'
+        elif any(k in text for k in ['average', 'avg']):
+            entities['operation'] = 'avg'
+        
+        # Detect status
+        status_map = {
+            'confirmed': 'confirmed',
+            'done': 'done',
+            'draft': 'draft',
+            'cancelled': 'cancelled',
+            'sent': 'sent'
+        }
+        for status_word, status_val in status_map.items():
+            if status_word in text:
+                entities['status'] = status_val
+                break
+        
+        # Detect date ranges
+        date_range = translator.parse_date_range(text) if 'translator' in dir() else None
+        if not date_range:
+            # Basic date detection
+            if 'last month' in text:
+                from datetime import datetime, timedelta
+                today = datetime.now()
+                first_day = today.replace(day=1)
+                last_month_end = first_day - timedelta(days=1)
+                last_month_start = last_month_end.replace(day=1)
+                entities['date_range'] = {
+                    'start': last_month_start.strftime('%Y-%m-%d'),
+                    'end': last_month_end.strftime('%Y-%m-%d')
+                }
+            elif 'this month' in text:
+                from datetime import datetime
+                today = datetime.now()
+                entities['date_range'] = {
+                    'start': today.replace(day=1).strftime('%Y-%m-%d'),
+                    'end': today.strftime('%Y-%m-%d')
+                }
+        else:
+            entities['date_range'] = date_range
+        
+        return entities
+
+    def _translate_entities(self, entities, translator):
+        """Apply semantic translation to extracted entities."""
+        translated = dict(entities)
+        
+        # Translate season
+        if entities.get('season'):
+            result = translator.translate_value(entities['season'], category='season')
+            if result.get('success'):
+                translated['season'] = result['translated']
+                translated['season_operator'] = result.get('operator', '=')
+        
+        # Translate status
+        if entities.get('status'):
+            result = translator.translate_value(entities['status'], category='status')
+            if result.get('success'):
+                translated['status'] = result['translated']
+        
+        return translated
+
+    def _execute_pattern_plan(self, conversation, user, company, user_message, plan, pattern_name, start_time):
+        """Execute a pattern-based query plan."""
+        steps = plan.get('steps', [])
+        results = {}
+        
+        for step in steps:
+            step_id = step.get('id', 'step_1')
+            model_name = step.get('model')
+            method = step.get('method', 'search_read')
+            domain = step.get('domain', [])
+            fields = step.get('fields', ['name'])
+            limit = step.get('limit', 100)
+            
+            try:
+                Model = self.env[model_name].with_user(user.id)
+                
+                if method == 'search_count':
+                    count = Model.search_count(domain)
+                    results[step_id] = count
+                elif method == 'read_group':
+                    group_by = step.get('group_by', [])
+                    data = Model.read_group(domain, fields, group_by, limit=limit)
+                    results[step_id] = data
+                else:
+                    records = Model.search_read(domain, fields, limit=limit)
+                    results[step_id] = records
+                    
+            except Exception as e:
+                _logger.error('Pattern step execution failed: %s', e)
+                return self._error_response(f'Query execution failed: {str(e)}')
+        
+        elapsed_ms = int((time.time() - start_time) * 1000)
+        
+        # Format results
+        first_step_id = steps[0]['id'] if steps else None
+        first_result = results.get(first_step_id, [])
+        
+        if isinstance(first_result, int):
+            # Count result
+            answer = f"Found {first_result} records."
+        elif isinstance(first_result, list) and len(first_result) > 0:
+            answer = f"Found {len(first_result)} records."
+        else:
+            answer = "Query executed successfully."
+        
+        structured = {
+            'answer': answer,
+            'table': {'columns': [], 'rows': first_result if isinstance(first_result, list) else [], 'total_row': None},
+            'meta': {
+                'route': 'pattern_based_query',
+                'pattern_used': pattern_name,
+                'steps_executed': len(steps),
+                'total_time_ms': elapsed_ms,
+            },
+        }
+        
+        # Bug #12 fix: Validate response
+        structured = self._ensure_valid_response(structured)
+        
+        self.env['ai.analyst.message'].create({
+            'conversation_id': conversation.id,
+            'role': 'assistant',
+            'content': structured.get('answer', answer),
+            'structured_response': json.dumps(structured, default=str),
+            'processing_time_ms': elapsed_ms,
+        })
+        
+        return structured
+
+    def _get_relevant_models(self, message):
+        """Return list of models relevant to the user question.
+
+        Always includes product.template, product.product.
+        Adds more based on keyword matching.
+        """
+        text = (message or '').lower()
+        models = ['product.template', 'product.product']
+
+        # Sales/revenue related
+        if any(k in text for k in ['revenue', 'sales', 'orders', 'sold', 'margin', 'discount', 'invoice']):
+            models.extend(['sale.order', 'sale.order.line'])
+
+        # Purchase related
+        if any(k in text for k in ['purchase', 'vendor', 'supplier', 'po', 'buying', 'cost']):
+            models.extend(['purchase.order', 'purchase.order.line'])
+
+        # Inventory/stock related
+        if any(k in text for k in ['stock', 'inventory', 'on hand', 'soh', 'available', 'quantity']):
+            models.append('stock.quant')
+
+        # Delivery/picking related
+        if any(k in text for k in ['delivery', 'transfer', 'picking', 'shipment', 'receipt', 'return']):
+            models.extend(['stock.picking', 'stock.move', 'stock.move.line'])
+
+        return list(dict.fromkeys(models))  # Preserve order, remove duplicates
+
+    def _build_kb_context(self, message):
+        """Build KB context for the message.
+
+        Loads JuniorCouture_Odoo_KnowledgeBase_merged_v1.json and returns
+        formatted context for relevant models only.
+
+        Returns empty string silently if file missing or error.
+        """
+        # Get KB path from config or use default
+        kb_path = self.env['ir.config_parameter'].sudo().get_param(
+            'ai_analyst.kb_json_path',
+            ''
+        )
+
+        if not kb_path:
+            # Default: look in module root relative to models/ directory
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            kb_path = os.path.join(current_dir, '..', 'JuniorCouture_Odoo_KnowledgeBase_merged_v1.json')
+            kb_path = os.path.normpath(kb_path)
+
+        try:
+            # Check if file exists
+            if not os.path.exists(kb_path):
+                return ''
+
+            # Get file mtime
+            mtime = os.path.getmtime(kb_path)
+            now = time.time()
+
+            cache = AiAnalystGateway._KB_CONTEXT_CACHE
+
+            # Use cache if valid (mtime matches and not expired)
+            if (cache['path'] == kb_path and
+                cache['mtime'] == mtime and
+                cache['kb_data'] is not None and
+                (now - cache['loaded_at']) < 300):  # 300s cache TTL
+                kb_data = cache['kb_data']
+            else:
+                # Load and cache
+                with open(kb_path, 'r', encoding='utf-8') as f:
+                    kb_data = json.load(f)
+
+                cache['path'] = kb_path
+                cache['mtime'] = mtime
+                cache['loaded_at'] = now
+                cache['kb_data'] = kb_data
+
+            # Get relevant models for this message
+            relevant_models = self._get_relevant_models(message)
+
+            # Build context for relevant models
+            kb_models = kb_data.get('models', {})
+            lines = ['=== KNOWLEDGE BASE ===']
+            model_context_added = False
+
+            for model_name in relevant_models:
+                if model_name not in kb_models:
+                    continue
+
+                model_info = kb_models[model_name] or {}
+                label = model_info.get('label', model_name)
+                lines.append(f"\n{model_name} ({label}):")
+
+                fields = model_info.get('fields', {}) or {}
+                for field_name, field_info in fields.items():
+                    if not isinstance(field_info, dict):
+                        continue
+
+                    field_label = field_info.get('label', '')
+                    field_type = field_info.get('type', '')
+                    field_desc = field_info.get('description', '')
+                    relation = field_info.get('relation', '')
+
+                    # Skip fields where both label and description are empty
+                    if not field_label and not field_desc:
+                        continue
+
+                    # Format: field_name (type → relation): Label — description
+                    type_str = field_type or 'unknown'
+                    if relation:
+                        type_str = f"{type_str} → {relation}"
+
+                    label_str = field_label or ''
+                    desc_str = f" — {field_desc}" if field_desc else ""
+                    lines.append(f"{field_name} ({type_str}): {label_str}{desc_str}")
+                    model_context_added = True
+
+            # If we have no KB model field context, return empty string
+            if not model_context_added:
+                return ''
+
+            # Append critical field rules
+            lines.append("\n=== CRITICAL FIELD RULES ===")
+            lines.append("- has_lifestyle = True → product has lifestyle image")
+            lines.append("- Season: x_studio_many2many_field_IXz60 on product.template, ilike %FW25%")
+            lines.append("- Brand: x_studio_many2one_field_mG9Pn on product.template")
+            lines.append("- Category: x_sfcc_primary_category (NOT categ_id — always \"All\")")
+            lines.append("- SOH: free_qty on product.product (NOT qty_available — computed)")
+            lines.append("- Cost: standard_price on product.product")
+            lines.append("- Margin = price_subtotal - (product_uom_qty * product_id.standard_price) on sale.order.line")
+            lines.append("- Confirmed sales: state IN ('sale','done') | Confirmed POs: state IN ('purchase','done')")
+            lines.append("- Online orders: origin ilike '%SFCC%' on sale.order | POS: use pos.order not sale.order")
+
+            return '\n'.join(lines)
+
+        except Exception:
+            # Silently return empty string on any error
+            return ''
+
+    def _build_system_prompt(self, user, company, workspace_ctx=None, message=''):
+        """Build the system prompt with context variables and optional workspace context."""
         user_tz = user.tz or 'UTC'
         currency = company.currency_id.name or 'USD'
         prompt = SYSTEM_PROMPT_TEMPLATE.format(
@@ -337,18 +841,10 @@ class AiAnalystGateway(models.AbstractModel):
         # Inject dimension dictionary context
         prompt += "\n\nDIMENSION DICTIONARY:\n" + self._build_dimension_prompt_context(user)
 
-        # Inject Field KB context for boss_open_query when available
-        try:
-            if user.has_group('ai_analyst.group_boss_open_query'):
-                icp = self.env['ir.config_parameter'].sudo()
-                if icp.get_param('ai_analyst.field_kb_needs_refresh', default='False') == 'True':
-                    self.env['ai.analyst.field.kb.service'].sudo().cron_refresh_kb()
-                    icp.set_param('ai_analyst.field_kb_needs_refresh', 'False')
-                kb_ctx = self.env['ai.analyst.field.kb.service'].with_user(user).build_field_context_text(user_message or '')
-                if kb_ctx.get('prompt_block'):
-                    prompt += "\n\n" + kb_ctx['prompt_block']
-        except Exception:
-            _logger.exception('Failed to append Field KB context to system prompt')
+        # Inject KB context for custom field awareness
+        kb_context = self._build_kb_context(message)
+        if kb_context:
+            prompt += "\n\n" + kb_context
 
         # Inject workspace-specific context after the base prompt
         if workspace_ctx and workspace_ctx.get('system_prompt_extra'):
@@ -356,7 +852,9 @@ class AiAnalystGateway(models.AbstractModel):
         return prompt
 
     def _build_dimension_prompt_context(self, user):
-        env_u = self.with_user(user).env
+        # Use environment user-switch API compatible with this Odoo runtime.
+        user_id = user.id if hasattr(user, 'id') else int(user)
+        env_u = self.env(user=user_id)
         dimensions = env_u['ai.analyst.dimension'].search([
             ('is_active', '=', True),
             '|', ('company_id', '=', False), ('company_id', 'in', user.company_ids.ids),
@@ -623,3 +1121,132 @@ class AiAnalystGateway(models.AbstractModel):
             'answer': message,
             'error': message,
         }
+
+    def _validate_response_schema(self, response):
+        """Validate response against the mandatory Response Schema v2.
+        
+        Bug #12 fix: Presenter must ALWAYS return valid response schema.
+        This method validates that the response matches the expected structure.
+        
+        Args:
+            response (dict): The response to validate
+            
+        Returns:
+            tuple: (is_valid: bool, errors: list)
+        """
+        if not isinstance(response, dict):
+            return False, ['Response must be a dict']
+        
+        errors = []
+        
+        # Check required 'answer' field
+        if 'answer' not in response:
+            errors.append("Missing required field: 'answer'")
+        elif not isinstance(response.get('answer'), str):
+            errors.append("'answer' must be a string")
+        elif len(response.get('answer', '')) < 1:
+            errors.append("'answer' must not be empty")
+        
+        # Check for additionalProperties constraint (no extra top-level keys)
+        allowed_keys = set(RESPONSE_SCHEMA['properties'].keys())
+        actual_keys = set(response.keys())
+        extra_keys = actual_keys - allowed_keys
+        if extra_keys:
+            errors.append(f"Unexpected top-level keys: {list(extra_keys)}")
+        
+        # Validate kpis structure if present
+        if 'kpis' in response:
+            kpis = response['kpis']
+            if not isinstance(kpis, list):
+                errors.append("'kpis' must be an array")
+            else:
+                for i, kpi in enumerate(kpis):
+                    if not isinstance(kpi, dict):
+                        errors.append(f"KPI at index {i} must be an object")
+                    elif 'label' not in kpi or 'value' not in kpi:
+                        errors.append(f"KPI at index {i} missing required 'label' or 'value'")
+        
+        # Validate table structure if present
+        if 'table' in response:
+            table = response['table']
+            if not isinstance(table, dict):
+                errors.append("'table' must be an object")
+            else:
+                if 'columns' not in table:
+                    errors.append("'table' missing required 'columns'")
+                elif not isinstance(table['columns'], list) or len(table['columns']) < 1:
+                    errors.append("'table.columns' must be a non-empty array")
+                else:
+                    for i, col in enumerate(table['columns']):
+                        if not isinstance(col, dict):
+                            errors.append(f"Column at index {i} must be an object")
+                        else:
+                            for req_field in ['key', 'label', 'type']:
+                                if req_field not in col:
+                                    errors.append(f"Column at index {i} missing '{req_field}'")
+                
+                if 'rows' not in table:
+                    errors.append("'table' missing required 'rows'")
+                elif not isinstance(table['rows'], list):
+                    errors.append("'table.rows' must be an array")
+        
+        # Validate chart structure if present
+        if 'chart' in response:
+            chart = response['chart']
+            if not isinstance(chart, dict):
+                errors.append("'chart' must be an object")
+            else:
+                valid_chart_types = ["bar", "line", "pie", "doughnut", "stacked_bar", "horizontal_bar"]
+                if chart.get('type') and chart['type'] not in valid_chart_types:
+                    errors.append(f"Invalid chart type: '{chart['type']}'")
+        
+        # Validate actions structure if present
+        if 'actions' in response:
+            actions = response['actions']
+            if not isinstance(actions, list):
+                errors.append("'actions' must be an array")
+            else:
+                valid_action_types = ["download_csv", "pin_to_dashboard", "next_page", "export_async", "open_record"]
+                for i, action in enumerate(actions):
+                    if not isinstance(action, dict):
+                        errors.append(f"Action at index {i} must be an object")
+                    else:
+                        if 'type' not in action:
+                            errors.append(f"Action at index {i} missing 'type'")
+                        elif action['type'] not in valid_action_types:
+                            errors.append(f"Action at index {i} has invalid type: '{action['type']}'")
+                        if 'label' not in action:
+                            errors.append(f"Action at index {i} missing 'label'")
+        
+        return len(errors) == 0, errors
+
+    def _ensure_valid_response(self, response):
+        """Ensure response is valid according to Response Schema v2.
+        
+        If the response fails validation, this method returns a sanitized
+        error response that IS valid according to the schema.
+        
+        Args:
+            response (dict): The response to validate/fix
+            
+        Returns:
+            dict: A valid response (original if valid, error response if not)
+        """
+        is_valid, errors = self._validate_response_schema(response)
+        if is_valid:
+            return response
+        
+        # Log validation errors
+        _logger.warning('Response schema validation failed: %s', errors)
+        
+        # Return a sanitized error response that IS valid
+        error_msg = response.get('error', 'Invalid response format')
+        sanitized = {
+            'answer': error_msg or 'An error occurred while processing your request.',
+            'error': error_msg or 'Invalid response format',
+            'meta': {
+                'validation_errors': errors,
+                'original_response_keys': list(response.keys()) if isinstance(response, dict) else [],
+            }
+        }
+        return sanitized

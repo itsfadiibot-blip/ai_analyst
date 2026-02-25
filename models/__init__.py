@@ -5,7 +5,6 @@ from . import ai_analyst_message
 from . import ai_analyst_tool_call_log
 from . import ai_analyst_audit_log
 from . import ai_analyst_provider_config
-from . import ai_analyst_model_router
 from . import ai_analyst_saved_report
 from . import dashboard
 from . import ai_analyst_gateway
@@ -13,5 +12,14 @@ from . import ai_analyst_dimension
 from . import res_config_settings
 from . import res_users
 from . import boss_open_query
-from . import field_kb
-from . import ir_module_module
+from . import schema_registry
+from . import field_relevance
+from . import query_pattern_library
+from . import semantic_translator
+from . import field_resolver
+from . import query_planner
+from . import query_plan_validator
+from . import computed_metrics
+from . import query_cache
+from . import query_orchestrator
+from . import query_feedback

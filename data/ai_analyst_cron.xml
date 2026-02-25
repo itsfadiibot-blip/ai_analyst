@@ -60,13 +60,25 @@ if old_logs:
             <field name="doall" eval="False"/>
         </record>
 
-        <record id="cron_field_kb_refresh" model="ir.cron">
-            <field name="name">AI Analyst: Field KB Nightly Refresh</field>
-            <field name="model_id" ref="model_ai_analyst_field_kb_model"/>
+        <record id="cron_refresh_schema_registry" model="ir.cron">
+            <field name="name">AI Analyst: Refresh Schema Registry</field>
+            <field name="model_id" ref="base.model_ir_config_parameter"/>
             <field name="state">code</field>
-            <field name="code">model.cron_refresh_kb()</field>
+            <field name="code">env['ai.analyst.schema.registry'].discover_models()</field>
             <field name="interval_number">1</field>
             <field name="interval_type">days</field>
+            <field name="numbercall">-1</field>
+            <field name="active" eval="True"/>
+            <field name="doall" eval="False"/>
+        </record>
+
+        <record id="cron_purge_query_cache" model="ir.cron">
+            <field name="name">AI Analyst: Purge Query Cache</field>
+            <field name="model_id" ref="model_ai_analyst_query_cache"/>
+            <field name="state">code</field>
+            <field name="code">model.purge_expired()</field>
+            <field name="interval_number">15</field>
+            <field name="interval_type">minutes</field>
             <field name="numbercall">-1</field>
             <field name="active" eval="True"/>
             <field name="doall" eval="False"/>

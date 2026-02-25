@@ -18,27 +18,25 @@
                 </div>
                 <div class="ai-analyst-conv-list overflow-auto" style="max-height: calc(100vh - 120px);">
                     <t t-foreach="state.conversations" t-as="conv" t-key="conv.id">
-                        <div t-att-class="'ai-analyst-conv-item p-2 px-3 border-bottom cursor-pointer '
+                        <div t-att-class="'ai-analyst-conv-item p-2 px-3 border-bottom cursor-pointer d-flex justify-content-between align-items-start '
                              + (state.currentConversationId === conv.id ? 'bg-primary-subtle' : '')"
                              t-on-click="() => this.selectConversation(conv.id)">
-                            <div class="d-flex align-items-start justify-content-between gap-2">
-                                <div class="flex-grow-1" style="min-width:0;">
-                                    <div class="fw-semibold text-truncate" style="font-size: 13px;">
-                                        <t t-esc="conv.name || 'Untitled'"/>
-                                    </div>
-                                    <div class="text-muted" style="font-size: 11px;">
-                                        <t t-esc="formatDate(conv.write_date)"/>
-                                        <span class="ms-2 badge bg-secondary-subtle text-secondary">
-                                            <t t-esc="conv.message_count"/> msgs
-                                        </span>
-                                    </div>
+                            <div class="flex-grow-1">
+                                <div class="fw-semibold text-truncate" style="font-size: 13px;">
+                                    <t t-esc="conv.name || 'Untitled'"/>
                                 </div>
-                                <button class="btn btn-sm btn-outline-danger py-0 px-2"
-                                        title="Delete conversation"
-                                        t-on-click.stop="() => this.deleteConversation(conv.id)">
-                                    🗑
-                                </button>
+                                <div class="text-muted" style="font-size: 11px;">
+                                    <t t-esc="formatDate(conv.write_date)"/>
+                                    <span class="ms-2 badge bg-secondary-subtle text-secondary">
+                                        <t t-esc="conv.message_count"/> msgs
+                                    </span>
+                                </div>
                             </div>
+                            <button class="btn btn-sm btn-outline-danger py-0 px-2 ms-2"
+                                    title="Delete conversation"
+                                    t-on-click.stop="() => this.archiveConversation(conv.id)">
+                                &#215;
+                            </button>
                         </div>
                     </t>
                     <div t-if="!state.conversations.length" class="p-3 text-muted text-center">
@@ -62,7 +60,6 @@
                     <WorkspaceSelector
                         workspaces="state.workspaces"
                         selectedWorkspaceId="state.selectedWorkspaceId"
-                        toolNames="state.workspaceToolNames"
                         onSelect.bind="onWorkspaceSelect"/>
                     <span class="fw-semibold flex-grow-1">
                         <t t-if="state.currentConversationId">
@@ -254,15 +251,11 @@
 
                                 <!-- Action buttons -->
                                 <div class="ai-actions mt-2 d-flex gap-2 flex-wrap">
-                                    <t t-if="msg.structured_response and msg.structured_response.actions">
-                                        <t t-foreach="msg.structured_response.actions" t-as="act" t-key="act_index">
-                                            <button t-if="act.type === 'download_csv'"
-                                                    class="aiBtn aiIconBtn"
-                                                    t-on-click="() => this.downloadCsv(msg.structured_response)">
-                                                Download CSV
-                                            </button>
-                                        </t>
-                                    </t>
+                                    <button t-if="msg.structured_response and ((msg.structured_response.actions and msg.structured_response.actions.some(a => a.type === 'download_csv')) or (msg.structured_response.table and msg.structured_response.table.columns and msg.structured_response.table.rows))"
+                                            class="aiBtn aiIconBtn"
+                                            t-on-click="() => this.downloadCsv(msg.structured_response)">
+                                        Download CSV
+                                    </button>
                                     <button t-if="msg.structured_response and !msg.structured_response.error"
                                             class="aiBtn aiIconBtn"
                                             t-on-click="() => this.saveReport(msg_index)">
@@ -305,6 +298,10 @@
                                 </div>
                                 <span class="text-muted">Analyzing...</span>
                             </div>
+                            <button class="btn btn-sm btn-outline-danger mt-2"
+                                    t-on-click="stopAnalyzing">
+                                Stop analyzing
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -326,15 +323,18 @@
                             style="resize: none; max-height: 120px; min-height: 40px;"
                             t-att-disabled="state.isLoading"
                         />
-                        <button
-                            class="aiBtn aiBtnPrimary"
-                            t-on-click="sendMessage"
-                            t-att-disabled="state.isLoading || !state.inputText.trim()"
-                            style="min-width: 70px; height: 40px;">
-                            <t t-if="state.isLoading">
-                                <span class="spinner-border spinner-border-sm"/>
-                            </t>
-                            <t t-else="">Send</t>
+                        <button t-if="!state.isLoading"
+                                class="aiBtn aiBtnPrimary"
+                                t-on-click="sendMessage"
+                                t-att-disabled="!state.inputText.trim()"
+                                style="min-width: 70px; height: 40px;">
+                            Send
+                        </button>
+                        <button t-else=""
+                                class="btn btn-outline-danger"
+                                t-on-click="stopAnalyzing"
+                                style="min-width: 120px; height: 40px;">
+                            Stop analyzing
                         </button>
                     </div>
                     <div class="text-center text-muted mt-1" style="font-size: 11px;">
